@@ -1,81 +1,235 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar,
+  Platform,
+  LayoutAnimation,
+  UIManager
+} from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import BackButton from '../components/BackButton';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [step, setStep] = useState(1); // Step 1: Phone, Step 2: OTP
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
+  const [contentVisible, setContentVisible] = useState(false);
 
-  const handleLogin = () => {
-    // TODO: integrate auth
-    console.log('Login:', email, password);
+  useEffect(() => {
+    setTimeout(() => {
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(
+          600,
+          LayoutAnimation.Types.easeOut,
+          LayoutAnimation.Properties.opacity
+        )
+      );
+      setContentVisible(true);
+    }, 100);
+  }, [step]);
+
+  const nextStep = () => setStep(step + 1);
+  const prevStep = () => {
+    if (step === 1) {
+      navigation.goBack();
+    } else {
+      setStep(step - 1);
+    }
+  };
+
+  const handlePhoneContinue = () => {
+    console.log('Send OTP to:', phoneNumber);
+    nextStep();
+  };
+
+  const handleOtpVerify = () => {
+    console.log('Verify OTP:', otp);
+    // You can navigate to Home after successful OTP verification
+    navigation.replace('Home'); // or wherever you want
+  };
+
+  const handleSignupNavigation = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    navigation.navigate('Signup');
   };
 
   return (
-    <View style={styles.container}>
-        <BackButton />
-      <Text style={styles.title}>Login</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <BackButton onPress={prevStep} />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
+      <View
+        style={[
+          styles.contentContainer,
+          { opacity: contentVisible ? 1 : 0 }
+        ]}
+      >
+        {step === 1 && (
+          <>
+            <Text style={styles.welcomeText}>Welcome Back</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="+1 (555) 123-4567"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                placeholderTextColor="#A0A0A0"
+              />
+            </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
-      </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.loginButton,
+                { backgroundColor: phoneNumber.length > 0 ? '#000000' : '#E0E0E0' }
+              ]}
+              onPress={handlePhoneContinue}
+              disabled={phoneNumber.length === 0}
+              activeOpacity={0.9}
+            >
+              <Text
+                style={[
+                  styles.loginButtonText,
+                  { color: phoneNumber.length > 0 ? '#FFFFFF' : '#A0A0A0' }
+                ]}
+              >
+                Continue
+              </Text>
+            </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-        <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
-      </TouchableOpacity>
-    </View>
+            <TouchableOpacity
+              style={styles.linkContainer}
+              onPress={handleSignupNavigation}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.linkText}>Create a new account</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <Text style={styles.welcomeText}>Verify OTP</Text>
+            <Text style={styles.subtitle}>Sent to {phoneNumber}</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter OTP"
+                value={otp}
+                onChangeText={setOtp}
+                keyboardType="number-pad"
+                placeholderTextColor="#A0A0A0"
+              />
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.loginButton,
+                { backgroundColor: otp.length > 0 ? '#000000' : '#E0E0E0' }
+              ]}
+              onPress={handleOtpVerify}
+              disabled={otp.length === 0}
+              activeOpacity={0.9}
+            >
+              <Text
+                style={[
+                  styles.loginButtonText,
+                  { color: otp.length > 0 ? '#FFFFFF' : '#A0A0A0' }
+                ]}
+              >
+                Verify
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    width: Platform.OS === 'web' ? 400 : '100%',
-    alignSelf: 'center',
+    backgroundColor: '#FFFFFF'
   },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 30 },
+  contentContainer: {
+    flex: 1,
+    paddingHorizontal: 40,
+    justifyContent: 'center'
+  },
+  welcomeText: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 40,
+    textAlign: 'center'
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 30
+  },
+  inputContainer: {
+    marginBottom: 30
+  },
+  inputLabel: {
+    fontSize: 16,
+    color: '#333333',
+    marginBottom: 8,
+    fontWeight: '500'
+  },
   input: {
     width: '100%',
-    height: 50,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 15,
-    paddingHorizontal: 15,
+    height: 56,
+    backgroundColor: '#F8F8F8',
+    borderRadius: 12,
+    paddingHorizontal: 20,
     fontSize: 16,
-    backgroundColor: '#fff',
+    color: '#000000',
+    borderWidth: 1,
+    borderColor: '#F0F0F0'
   },
-  button: {
+  loginButton: {
     width: '100%',
-    backgroundColor: '#0a84ff',
-    padding: 15,
-    borderRadius: 8,
-    marginVertical: 10,
+    height: 56,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3
   },
-  buttonText: { color: 'white', fontSize: 18, textAlign: 'center' },
-  linkText: { color: '#0a84ff', marginTop: 10 },
+  loginButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.3
+  },
+  linkContainer: {
+    alignItems: 'center',
+    paddingVertical: 10
+  },
+  linkText: {
+    color: '#666666',
+    fontSize: 16,
+    fontWeight: '500',
+    textDecorationLine: 'underline'
+  }
 });
