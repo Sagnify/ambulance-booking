@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useAuth } from '../../context/AuthContext';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import HomeScreen from '../screens/HomeScreen';
+import SplashScreen from '../screens/SplashScreen'; // Add this
 
 export type RootStackParamList = {
   Welcome: undefined;
@@ -15,38 +17,24 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-interface Props {
-  userLoggedIn: boolean;
-}
+export default function AppNavigator() {
+  const { userLoggedIn } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
 
-export default function AppNavigator({ userLoggedIn }: Props) {
+  if (isLoading) {
+    return <SplashScreen onFinish={() => setIsLoading(false)} />;
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator>
         {userLoggedIn ? (
-          <Stack.Screen 
-            name="Home" 
-            component={HomeScreen} 
-            options={{ headerShown: false }} // hide header on home
-          />
+          <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         ) : (
           <>
-            <Stack.Screen 
-              name="Welcome" 
-              component={WelcomeScreen} 
-              options={{ headerShown: false }} // hide header on welcome
-            />
-            <Stack.Screen 
-            name="Login" 
-            component={LoginScreen} 
-            options={{ headerShown: false }} 
-            />
-            <Stack.Screen 
-            name="Signup" 
-            component={SignupScreen} 
-            options={{ headerShown: false }} 
-            />
-
+            <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Signup" component={SignupScreen} options={{ headerShown: false }} />
           </>
         )}
       </Stack.Navigator>

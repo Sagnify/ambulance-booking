@@ -9,11 +9,13 @@ import {
   StatusBar,
   Platform,
   LayoutAnimation,
-  UIManager
+  UIManager,
+  Alert
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import BackButton from '../components/BackButton';
+import { useAuth } from '../../context/AuthContext';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -22,10 +24,20 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
+  const { setUserLoggedIn } = useAuth();
   const [step, setStep] = useState(1); // Step 1: Phone, Step 2: OTP
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [contentVisible, setContentVisible] = useState(false);
+
+  // For Web Alert Fallback
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}: ${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
 
   useEffect(() => {
     setTimeout(() => {
@@ -49,15 +61,85 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
-  const handlePhoneContinue = () => {
-    console.log('Send OTP to:', phoneNumber);
-    nextStep();
+  const handlePhoneContinue = async () => {
+    try {
+      if (!phoneNumber || phoneNumber.length < 8) {
+        showAlert('Error', 'Please enter a valid phone number.');
+        return;
+      }
+
+      console.log('Sending OTP to:', phoneNumber);
+
+      const response = await fetch('http://127.0.0.1:5000/send-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone: phoneNumber }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('API Response:', data);
+
+      if (data.success) {
+        nextStep(); // Move to OTP input step
+      } else {
+        showAlert('Failed', data.message || 'Unable to send OTP.');
+      }
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      showAlert('Error', 'Could not connect to server.');
+    }
   };
 
-  const handleOtpVerify = () => {
-    console.log('Verify OTP:', otp);
-    // You can navigate to Home after successful OTP verification
-    navigation.replace('Home'); // or wherever you want
+  const handleOtpVerify = async () => {
+    try {
+      if (!otp || otp.length < 4) {
+        showAlert('Error', 'Please enter a valid OTP.');
+        return;
+      }
+
+      console.log('Verifying OTP:', otp);
+
+      const response = await fetch('http://127.0.0.1:5000/verify-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone: phoneNumber,
+          otp: otp,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('API Response:', data);
+
+      if (data.success) {
+        showAlert('Success', 'OTP verified successfully!');
+        setUserLoggedIn(true);
+
+        // ✅ Ensure "Home" exists in the navigator
+        if (navigation.getState().routeNames.includes('Home')) {
+          navigation.navigate('Home');
+        } else {
+          console.warn('Route "Home" does not exist. Check your navigator.');
+        }
+      } else {
+        showAlert('Error', data.message || 'OTP verification failed.');
+      }
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      showAlert('Error', 'Could not connect to server.');
+    }
   };
 
   const handleSignupNavigation = () => {
