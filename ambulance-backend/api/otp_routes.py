@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from werkzeug.exceptions import BadRequest
 
 otp_bp = Blueprint('otp', __name__)
 
@@ -30,10 +31,26 @@ def send_otp():
 
 @otp_bp.route('/verify-otp', methods=['POST'])
 def verify_otp():
-    data = request.json
-    entered_otp = data.get("otp")
+    """
+    Verifies an OTP sent in a JSON request.
+    Handles potential errors if the request body is not valid JSON.
+    """
+    try:
+        data = request.json
+        if data is None:
+            # Handle cases where the request body is not JSON or is empty
+            raise BadRequest("Request body must be valid JSON.")
+            
+        entered_otp = data.get("otp")
 
-    if entered_otp == FIXED_OTP:
-        return jsonify({"success": True, "message": "OTP verified successfully"})
-    else:
-        return jsonify({"success": False, "message": "Invalid OTP"})
+        if entered_otp == FIXED_OTP:
+            return jsonify({"success": True, "message": "OTP verified successfully"}), 200
+        else:
+            return jsonify({"success": False, "message": "Invalid OTP"}), 200
+
+    except BadRequest as e:
+        # Catch JSON parsing errors
+        return jsonify({"success": False, "message": str(e)}), 400
+    except Exception as e:
+        # Catch any other unexpected errors
+        return jsonify({"success": False, "message": "An internal server error occurred"}), 500
