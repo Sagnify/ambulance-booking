@@ -16,6 +16,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import BackButton from '../components/BackButton';
 import { useAuth } from '../../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -125,6 +126,7 @@ export default function LoginScreen({ navigation }: Props) {
 
       if (data.success) {
         showAlert('Success', 'OTP verified successfully!');
+        await AsyncStorage.setItem('userLoggedIn', 'true');
         setUserLoggedIn(true);
 
         // ✅ Ensure "Home" exists in the navigator

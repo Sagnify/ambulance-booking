@@ -5,6 +5,7 @@ interface AuthContextType {
   userLoggedIn: boolean;
   setUserLoggedIn: (value: boolean) => void;
   loading: boolean;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,9 +38,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Error saving login state:', error);
     }
   };
+  const logout = async () => {
+    await AsyncStorage.removeItem('userLoggedIn');
+    setUserLoggedIn(false);
+  };
 
   return (
-    <AuthContext.Provider value={{ userLoggedIn, setUserLoggedIn, loading }}>
+    <AuthContext.Provider value={{ userLoggedIn, setUserLoggedIn, loading, logout }}>
       {children}
     </AuthContext.Provider>
   );
