@@ -12,8 +12,10 @@ import {
   TextInput,
   Keyboard 
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
 import * as Location from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
 import BottomSheet from '@gorhom/bottom-sheet';
 import BottomPanel from '../components/BottomSheetContent';
 
@@ -34,6 +36,12 @@ const HomeScreen = () => {
   const [showHospitalSearch, setShowHospitalSearch] = useState(false);
   const [hospitalSearch, setHospitalSearch] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [markers] = useState([
+    { id: 1, x: '30%', y: '25%', type: 'hospital', name: 'City General Hospital' },
+    { id: 2, x: '70%', y: '40%', type: 'ambulance', name: 'Ambulance Unit 1' },
+    { id: 3, x: '45%', y: '60%', type: 'hospital', name: 'Metro Medical Center' },
+    { id: 4, x: '20%', y: '70%', type: 'ambulance', name: 'Ambulance Unit 2' },
+  ]);
 
   // Get user location
   useEffect(() => {
@@ -299,11 +307,42 @@ const HomeScreen = () => {
       
       {/* Map */}
       <View style={styles.mapContainer}>
-        <View style={styles.mapPlaceholder}>
-          <Text style={styles.mapIcon}>🗺️</Text>
-          <Text style={styles.mapText}>Interactive Map</Text>
-          <Text style={styles.locationText}>📍 {address}</Text>
-        </View>
+        <WebView
+          style={styles.map}
+          source={{
+            html: `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+                <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+                <style>
+                  body { margin: 0; padding: 0; }
+                  #map { height: 100vh; width: 100vw; }
+                </style>
+              </head>
+              <body>
+                <div id="map"></div>
+                <script>
+                  var map = L.map('map').setView([${userLocation.latitude || 28.6139}, ${userLocation.longitude || 77.2090}], 15);
+                  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                  
+                  // Add markers
+                  L.marker([${(userLocation.latitude || 28.6139) + 0.01}, ${(userLocation.longitude || 77.2090) + 0.01}])
+                    .addTo(map).bindPopup('City General Hospital<br>2.3 km away');
+                  L.marker([${(userLocation.latitude || 28.6139) - 0.01}, ${(userLocation.longitude || 77.2090) - 0.01}])
+                    .addTo(map).bindPopup('Metro Medical Center<br>3.1 km away');
+                  L.marker([${(userLocation.latitude || 28.6139) + 0.005}, ${(userLocation.longitude || 77.2090) - 0.015}])
+                    .addTo(map).bindPopup('Central Care Hospital<br>4.2 km away');
+                </script>
+              </body>
+              </html>
+            `
+          }}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+        />
       </View>
 
       {/* Current Location Pin (centered) */}
@@ -394,27 +433,8 @@ const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
   },
-  mapPlaceholder: {
+  map: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mapIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  mapText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  locationText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    paddingHorizontal: 20,
   },
 
   // Center Pin

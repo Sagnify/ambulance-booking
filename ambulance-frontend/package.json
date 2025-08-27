@@ -28,7 +28,7 @@
     "react-native-animatable": "^1.4.0",
     "react-native-geolocation-service": "^5.3.1",
     "react-native-gesture-handler": "~2.24.0",
-    "react-native-maps": "^1.25.3",
+    "react-native-maps": "1.20.1",
     "react-native-paper": "^5.14.5",
     "react-native-permissions": "^5.4.2",
     "react-native-reanimated": "~3.17.4",
