@@ -17,6 +17,7 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import BackButton from '../components/BackButton';
 import { useAuth } from '../../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import API  from '../../services/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -62,6 +63,7 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
+
   const handlePhoneContinue = async () => {
     try {
       if (!phoneNumber || phoneNumber.length < 8) {
@@ -71,31 +73,30 @@ export default function LoginScreen({ navigation }: Props) {
 
       console.log('Sending OTP to:', phoneNumber);
 
-      const response = await fetch('http://127.0.0.1:5000/send-otp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ phone: phoneNumber }),
+      // Use Axios instance
+      const response = await API.post('/send-otp', {
+        phone: phoneNumber,
       });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      console.log('API Response:', response.data);
 
-      const data = await response.json();
-      console.log('API Response:', data);
-
-      if (data.success) {
+      if (response.data.success) {
         nextStep(); // Move to OTP input step
       } else {
-        showAlert('Failed', data.message || 'Unable to send OTP.');
+        showAlert('Failed', response.data.message || 'Unable to send OTP.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending OTP:', error);
-      showAlert('Error', 'Could not connect to server.');
+
+      // Check if server responded with error details
+      if (error.response && error.response.data) {
+        showAlert('Error', error.response.data.message || 'Something went wrong.');
+      } else {
+        showAlert('Error', 'Could not connect to server.');
+      }
     }
   };
+
 
   const handleOtpVerify = async () => {
     try {
@@ -106,41 +107,41 @@ export default function LoginScreen({ navigation }: Props) {
 
       console.log('Verifying OTP:', otp);
 
-      const response = await fetch('http://127.0.0.1:5000/verify-otp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phone: phoneNumber,
-          otp: otp,
-        }),
+      // Axios request
+      const response = await API.post('/verify-otp', {
+        phone: phoneNumber,
+        otp: otp,
       });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      console.log('API Response:', response.data);
 
-      const data = await response.json();
-      console.log('API Response:', data);
-
-      if (data.success) {
+      if (response.data.success) {
         showAlert('Success', 'OTP verified successfully!');
         await AsyncStorage.setItem('userLoggedIn', 'true');
         setUserLoggedIn(true);
 
-        // ✅ Ensure "Home" exists in the navigator
-        if (navigation.getState().routeNames.includes('Home')) {
-          navigation.navigate('Home');
+        // ✅ Navigate if route exists
+        const state = navigation.getState();
+        console.log('Available Routes:', state.routeNames);
+
+        if (state.routeNames.includes('Home')) {
+          // navigation.navigate('Home');
+          console.log("Redirecting to home page...")
         } else {
           console.warn('Route "Home" does not exist. Check your navigator.');
         }
+
       } else {
-        showAlert('Error', data.message || 'OTP verification failed.');
+        showAlert('Error', response.data.message || 'OTP verification failed.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error verifying OTP:', error);
-      showAlert('Error', 'Could not connect to server.');
+
+      if (error.response && error.response.data) {
+        showAlert('Error', error.response.data.message || 'Something went wrong.');
+      } else {
+        showAlert('Error', 'Could not connect to server.');
+      }
     }
   };
 
