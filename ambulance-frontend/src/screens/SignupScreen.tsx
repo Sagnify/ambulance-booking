@@ -36,19 +36,23 @@ export default function SignupScreen() {
   const sendOTP = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API}/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: phone })
+      const response = await API.post('/api/auth/signup', {
+        phone_number: phone
       });
-      const data = await response.json();
-      if (response.ok) {
-        nextStep();
-      } else {
-        Alert.alert('Error', data.error);
+      nextStep();
+    } catch (error: any) {
+      console.log('Signup error:', error.response?.data || error.message);
+      let message = 'Network error';
+      if (error.code === 'NETWORK_ERROR' || !error.response) {
+        message = 'Server is currently unavailable. Please try again later.';
+      } else if (error.response?.data?.error?.message) {
+        message = error.response.data.error.message;
+      } else if (error.response?.data?.error) {
+        message = error.response.data.error;
+      } else if (error.response?.status >= 500) {
+        message = 'Server is experiencing issues. Please try again later.';
       }
-    } catch (error) {
-      Alert.alert('Error', 'Network error');
+      Alert.alert('Error', message);
     }
     setLoading(false);
   };
@@ -56,19 +60,24 @@ export default function SignupScreen() {
   const verifyOTP = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API}/auth/signup/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: phone, otp })
+      const response = await API.post('/api/auth/signup/verify', {
+        phone_number: phone,
+        otp
       });
-      const data = await response.json();
-      if (response.ok) {
-        nextStep();
-      } else {
-        Alert.alert('Error', data.error);
+      nextStep();
+    } catch (error: any) {
+      console.log('Verify error:', error.response?.data || error.message);
+      let message = 'Network error';
+      if (error.code === 'NETWORK_ERROR' || !error.response) {
+        message = 'Server is currently unavailable. Please try again later.';
+      } else if (error.response?.data?.error?.message) {
+        message = error.response.data.error.message;
+      } else if (error.response?.data?.error) {
+        message = error.response.data.error;
+      } else if (error.response?.status >= 500) {
+        message = 'Server is experiencing issues. Please try again later.';
       }
-    } catch (error) {
-      Alert.alert('Error', 'Network error');
+      Alert.alert('Error', message);
     }
     setLoading(false);
   };
@@ -76,16 +85,15 @@ export default function SignupScreen() {
   const updateProfile = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API}/auth/profile`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: 1, name, address })
+      const response = await API.put('/api/auth/profile', {
+        user_id: 1,
+        name,
+        address
       });
-      if (response.ok) {
-        Alert.alert('Success', 'Account created successfully!');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update profile');
+      Alert.alert('Success', 'Account created successfully!');
+    } catch (error: any) {
+      const message = error.response?.data?.error || 'Failed to update profile';
+      Alert.alert('Error', message);
     }
     setLoading(false);
   };

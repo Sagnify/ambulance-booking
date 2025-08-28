@@ -18,11 +18,13 @@ import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
 import BottomSheet from '@gorhom/bottom-sheet';
 import BottomPanel from '../components/BottomSheetContent';
+import { useAuth } from '../../context/AuthContext';
 
 
 const { width, height } = Dimensions.get('window');
 
 const HomeScreen = () => {
+  const { logout } = useAuth();
   const [address, setAddress] = useState('Fetching location...');
   const [userLocation, setUserLocation] = useState({ 
     latitude: 28.6139, 
@@ -137,8 +139,8 @@ const HomeScreen = () => {
   };
 
   const handleLogout = () => {
-    console.log('Logout clicked');
     setProfileMenuVisible(false);
+    logout();
   };
 
   const onPanGestureEvent = (event: any) => {

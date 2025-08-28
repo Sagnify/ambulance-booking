@@ -39,8 +39,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   const logout = async () => {
-    await AsyncStorage.removeItem('userLoggedIn');
-    setUserLoggedIn(false);
+    try {
+      await AsyncStorage.removeItem('userLoggedIn');
+      setUserLoggedInState(false);
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
   };
 
   return (
