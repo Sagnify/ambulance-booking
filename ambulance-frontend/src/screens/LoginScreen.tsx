@@ -16,7 +16,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import BackButton from '../components/BackButton';
 import { useAuth } from '../../context/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import API  from '../../services/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -71,26 +70,33 @@ export default function LoginScreen({ navigation }: Props) {
         return;
       }
 
-      console.log('Sending OTP to:', phoneNumber);
+      console.log('Checking user and sending OTP to:', phoneNumber);
 
-      // Use Axios instance
-      const response = await API.post('/send-otp', {
-        phone: phoneNumber,
+      // Check if user exists and send OTP for login
+      const response = await API.post('/api/auth/login', {
+        phone_number: phoneNumber,
       });
 
       console.log('API Response:', response.data);
 
-      if (response.data.success) {
+      if (response.status === 200) {
         nextStep(); // Move to OTP input step
-      } else {
-        showAlert('Failed', response.data.message || 'Unable to send OTP.');
       }
     } catch (error: any) {
-      console.error('Error sending OTP:', error);
+      console.error('Error in login:', error);
 
-      // Check if server responded with error details
-      if (error.response && error.response.data) {
-        showAlert('Error', error.response.data.message || 'Something went wrong.');
+      // Check if user not found (404 error)
+      if (error.response?.status === 404) {
+        Alert.alert(
+          'User Not Found',
+          'No account found with this phone number. Would you like to sign up?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign Up', onPress: () => navigation.navigate('Signup') }
+          ]
+        );
+      } else if (error.response?.data?.error) {
+        showAlert('Error', error.response.data.error);
       } else {
         showAlert('Error', 'Could not connect to server.');
       }
@@ -107,38 +113,23 @@ export default function LoginScreen({ navigation }: Props) {
 
       console.log('Verifying OTP:', otp);
 
-      // Axios request
-      const response = await API.post('/verify-otp', {
-        phone: phoneNumber,
+      // Verify OTP for login
+      const response = await API.post('/api/auth/login/verify', {
+        phone_number: phoneNumber,
         otp: otp,
       });
 
       console.log('API Response:', response.data);
 
-      if (response.data.success) {
-        showAlert('Success', 'OTP verified successfully!');
-        await AsyncStorage.setItem('userLoggedIn', 'true');
+      if (response.status === 200) {
         setUserLoggedIn(true);
-
-        // ✅ Navigate if route exists
-        const state = navigation.getState();
-        console.log('Available Routes:', state.routeNames);
-
-        if (state.routeNames.includes('Home')) {
-          // navigation.navigate('Home');
-          console.log("Redirecting to home page...")
-        } else {
-          console.warn('Route "Home" does not exist. Check your navigator.');
-        }
-
-      } else {
-        showAlert('Error', response.data.message || 'OTP verification failed.');
+        console.log("Login successful, redirecting to home page...");
       }
     } catch (error: any) {
       console.error('Error verifying OTP:', error);
 
-      if (error.response && error.response.data) {
-        showAlert('Error', error.response.data.message || 'Something went wrong.');
+      if (error.response?.data?.error) {
+        showAlert('Error', error.response.data.error);
       } else {
         showAlert('Error', 'Could not connect to server.');
       }

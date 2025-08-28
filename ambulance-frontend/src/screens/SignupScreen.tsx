@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import BackButton from '../components/BackButton';
 import API  from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 // const API_BASE = 'http://localhost:5000/api';
 
@@ -82,6 +83,8 @@ export default function SignupScreen() {
     setLoading(false);
   };
 
+  const { setUserLoggedIn } = useAuth();
+
   const updateProfile = async () => {
     setLoading(true);
     try {
@@ -90,7 +93,8 @@ export default function SignupScreen() {
         name,
         address
       });
-      Alert.alert('Success', 'Account created successfully!');
+      // Set user as logged in and navigate to home
+      setUserLoggedIn(true);
     } catch (error: any) {
       const message = error.response?.data?.error || 'Failed to update profile';
       Alert.alert('Error', message);

@@ -62,50 +62,60 @@ def signup_verify():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    phone_number = data.get('phone_number')
-    
-    if not phone_number:
-        return jsonify({'error': 'Phone number is required'}), 400
-    
-    # Check if user exists
-    user = User.query.filter_by(phone_number=phone_number).first()
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
-    # Send OTP for login
-    otp_response = send_otp(phone_number)
-    if otp_response[1] != 200:
-        return otp_response
-    
-    return jsonify({'message': 'OTP sent for login verification'}), 200
+    try:
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        
+        if not phone_number:
+            return jsonify({'error': 'Phone number is required'}), 400
+        
+        # Check if user exists
+        user = User.query.filter_by(phone_number=phone_number).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Send OTP for login
+        otp_data, otp_status = send_otp_helper(phone_number)
+        if otp_status != 200:
+            return jsonify(otp_data), otp_status
+        
+        return jsonify({'message': 'OTP sent for login verification'}), 200
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/login/verify', methods=['POST'])
 def login_verify():
-    data = request.get_json()
-    phone_number = data.get('phone_number')
-    otp = data.get('otp')
-    
-    if not phone_number or not otp:
-        return jsonify({'error': 'Phone number and OTP are required'}), 400
-    
-    # Verify OTP
-    verify_response = verify_otp(phone_number, otp)
-    if verify_response[1] != 200:
-        return verify_response
-    
-    # Get user
-    user = User.query.filter_by(phone_number=phone_number).first()
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
-    return jsonify({
-        'message': 'Login successful',
-        'user_id': user.id,
-        'phone_number': user.phone_number,
-        'name': user.name,
-        'email': user.email
-    }), 200
+    try:
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        otp = data.get('otp')
+        
+        if not phone_number or not otp:
+            return jsonify({'error': 'Phone number and OTP are required'}), 400
+        
+        # Verify OTP
+        verify_data, verify_status = verify_otp_helper(phone_number, otp)
+        if verify_status != 200:
+            return jsonify(verify_data), verify_status
+        
+        # Get user
+        user = User.query.filter_by(phone_number=phone_number).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({
+            'message': 'Login successful',
+            'user_id': user.id,
+            'phone_number': user.phone_number,
+            'name': user.name,
+            'email': user.email
+        }), 200
+    except Exception as e:
+        print(f"Login verify error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/profile', methods=['PUT'])
 def update_profile():
