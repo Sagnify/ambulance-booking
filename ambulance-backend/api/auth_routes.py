@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from .models import User, db
-from .otp_routes import send_otp, verify_otp
+from .otp_routes import send_otp_helper, verify_otp_helper
 import traceback
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
@@ -20,9 +20,9 @@ def signup():
             return jsonify({'error': 'User already exists'}), 409
         
         # Send OTP for verification
-        otp_response = send_otp(phone_number)
-        if otp_response[1] != 200:
-            return otp_response
+        otp_data, otp_status = send_otp_helper(phone_number)
+        if otp_status != 200:
+            return jsonify(otp_data), otp_status
         
         return jsonify({'message': 'OTP sent for signup verification'}), 200
     except Exception as e:
@@ -41,9 +41,9 @@ def signup_verify():
             return jsonify({'error': 'Phone number and OTP are required'}), 400
         
         # Verify OTP
-        verify_response = verify_otp(phone_number, otp)
-        if verify_response[1] != 200:
-            return verify_response
+        verify_data, verify_status = verify_otp_helper(phone_number, otp)
+        if verify_status != 200:
+            return jsonify(verify_data), verify_status
         
         # Create new user
         user = User(phone_number=phone_number)

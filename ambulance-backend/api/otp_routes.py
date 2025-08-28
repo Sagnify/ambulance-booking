@@ -5,6 +5,34 @@ otp_bp = Blueprint('otp', __name__)
 
 FIXED_OTP = "1234"
 
+# Helper functions for internal use
+def send_otp_helper(phone_number):
+    """Helper function to send OTP - returns (response_data, status_code)"""
+    try:
+        if not phone_number:
+            return {'error': 'Phone number is required'}, 400
+        
+        if not phone_number.isdigit() or len(phone_number) < 10:
+            return {'error': 'Invalid phone number format'}, 400
+        
+        print(f"Generated OTP for {phone_number}: {FIXED_OTP}")
+        return {'message': 'OTP sent successfully'}, 200
+    except Exception as e:
+        return {'error': f'Server error: {str(e)}'}, 500
+
+def verify_otp_helper(phone_number, otp):
+    """Helper function to verify OTP - returns (response_data, status_code)"""
+    try:
+        if not phone_number or not otp:
+            return {'error': 'Phone number and OTP are required'}, 400
+        
+        if otp == FIXED_OTP:
+            return {'message': 'OTP verified successfully'}, 200
+        else:
+            return {'error': 'Invalid OTP'}, 400
+    except Exception as e:
+        return {'error': f'Server error: {str(e)}'}, 500
+
 @otp_bp.route('/send-otp', methods=['POST'])
 def send_otp():
     try:
@@ -13,18 +41,12 @@ def send_otp():
             return jsonify({"success": False, "message": "Request body is missing or invalid JSON"}), 400
         
         phone = data.get("phone")
-        if not phone:
-            return jsonify({"success": False, "message": "Phone number is required"}), 400
-
-        # Basic validation for phone number format (you can improve this)
-        if not phone.isdigit() or len(phone) < 10:
-            return jsonify({"success": False, "message": "Invalid phone number format"}), 400
-
-        # Here you would normally generate and send OTP (SMS/Email)
-        # For now, just mock it
-        print(f"Generated OTP for {phone}: {FIXED_OTP}")  # For debugging (remove in production)
-
-        return jsonify({"success": True, "message": "OTP sent successfully (testing mode)"}), 200
+        response_data, status_code = send_otp_helper(phone)
+        
+        if status_code == 200:
+            return jsonify({"success": True, "message": response_data['message']}), 200
+        else:
+            return jsonify({"success": False, "message": response_data['error']}), status_code
 
     except Exception as e:
         return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
@@ -38,19 +60,19 @@ def verify_otp():
     try:
         data = request.json
         if data is None:
-            # Handle cases where the request body is not JSON or is empty
             raise BadRequest("Request body must be valid JSON.")
             
+        phone = data.get("phone")
         entered_otp = data.get("otp")
-
-        if entered_otp == FIXED_OTP:
-            return jsonify({"success": True, "message": "OTP verified successfully"}), 200
+        
+        response_data, status_code = verify_otp_helper(phone, entered_otp)
+        
+        if status_code == 200:
+            return jsonify({"success": True, "message": response_data['message']}), 200
         else:
-            return jsonify({"success": False, "message": "Invalid OTP"}), 200
+            return jsonify({"success": False, "message": response_data['error']}), status_code
 
     except BadRequest as e:
-        # Catch JSON parsing errors
         return jsonify({"success": False, "message": str(e)}), 400
     except Exception as e:
-        # Catch any other unexpected errors
         return jsonify({"success": False, "message": "An internal server error occurred"}), 500
