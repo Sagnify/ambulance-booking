@@ -25,8 +25,31 @@ def create_app(config_name=None):
     # Register blueprints
     from .otp_routes import otp_bp
     from .auth_routes import auth_bp
+    from .health_routes import health_bp
     app.register_blueprint(otp_bp)
     app.register_blueprint(auth_bp)
-    
+    app.register_blueprint(health_bp)
+
+    @app.route('/')
+    def api_list():
+        return {
+            "message": "Ambulance Booking API",
+            "endpoints": {
+                "Health Routes": {
+                    "GET /api/health/check": "Check server and database status"
+                },
+                "OTP Routes": {
+                    "POST /api/otp/send": "Send OTP to phone number",
+                    "POST /api/otp/verify": "Verify OTP code"
+                },
+                "Auth Routes": {
+                    "POST /api/auth/signup": "Send OTP for new user signup",
+                    "POST /api/auth/signup/verify": "Verify OTP and create user",
+                    "POST /api/auth/login": "Send OTP for existing user login",
+                    "POST /api/auth/login/verify": "Verify OTP and authenticate user",
+                    "PUT /api/auth/profile": "Update user profile details"
+                }
+            }
+        }
 
     return app
