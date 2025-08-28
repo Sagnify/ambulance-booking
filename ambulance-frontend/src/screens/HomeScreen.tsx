@@ -12,13 +12,15 @@ import {
   TextInput,
   Keyboard 
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
 import * as Location from 'expo-location';
-import MapView, { Marker } from 'react-native-maps';
-import BottomSheet from '@gorhom/bottom-sheet';
-import BottomPanel from '../components/BottomSheetContent';
+import LocationSnapButton from '../components/LocationSnapButton';
+import TopNavigation from '../components/TopNavigation';
+import MapViewComponent from '../components/MapView';
+import ServiceCard from '../components/ServiceCard';
+import EmergencyModal from '../components/EmergencyModal';
 import { useAuth } from '../../context/AuthContext';
+import API from '../../services/api';
 
 
 const { width, height } = Dimensions.get('window');
@@ -32,12 +34,28 @@ const HomeScreen = () => {
   });
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const [selectedService, setSelectedService] = useState<'emergency' | 'accident' | 'hospital' | null>(null);
-  const sheetRef = useRef<BottomSheet>(null);
+  // Removed unused sheetRef for BottomSheet
   const panelHeight = useRef(new Animated.Value(height * 0.4)).current;
   const [panelPosition, setPanelPosition] = useState(height * 0.4);
   const [showHospitalSearch, setShowHospitalSearch] = useState(false);
   const [hospitalSearch, setHospitalSearch] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [userName, setUserName] = useState('User');
+  const [cachedLocation, setCachedLocation] = useState<{latitude: number, longitude: number, timestamp: number} | null>(null);
+  const webViewRef = useRef<any>(null);
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
+  const [showEmergencyDashboard, setShowEmergencyDashboard] = useState(false);
+  const [emergencyData, setEmergencyData] = useState({
+    condition: '',
+    severity: '',
+    instructions: ''
+  });
+  const [showConditionDropdown, setShowConditionDropdown] = useState(false);
+  const [showHospitalSelection, setShowHospitalSelection] = useState(false);
+  const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
+  const [selectedHospital, setSelectedHospital] = useState<{name: string, distance: string, eta: string} | null>(null);
+  const [ambulanceETA, setAmbulanceETA] = useState('8-12 min');
   const [markers] = useState([
     { id: 1, x: '30%', y: '25%', type: 'hospital', name: 'City General Hospital' },
     { id: 2, x: '70%', y: '40%', type: 'ambulance', name: 'Ambulance Unit 1' },
@@ -82,11 +100,27 @@ const HomeScreen = () => {
     getLocation();
   }, []);
 
+  // Get user data
+  useEffect(() => {
+    const getUserData = async () => {
+      try {
+        const response = await API.get('/api/auth/users');
+        if (response.data.users && response.data.users.length > 0) {
+          const user = response.data.users[response.data.users.length - 1]; // Get latest user
+          setUserName(user.name || 'User');
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+    getUserData();
+  }, []);
+
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
       setKeyboardHeight(e.endCoordinates.height);
       if (showHospitalSearch) {
-        const newHeight = height - e.endCoordinates.height - 100;
+        const newHeight = height - e.endCoordinates.height+ 180;
         setPanelPosition(newHeight);
         Animated.spring(panelHeight, {
           toValue: newHeight,
@@ -128,8 +162,77 @@ const HomeScreen = () => {
         tension: 100,
         friction: 8,
       }).start();
+    } else if (service === 'emergency') {
+      setShowEmergencyModal(true);
     }
     console.log('Selected service:', service);
+  };
+
+  const handleEmergencyConfirm = () => {
+    setShowEmergencyModal(false);
+    setShowEmergencyForm(true);
+    setPanelPosition(height * 0.85);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.85,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+  };
+
+  const handleEmergencySubmit = () => {
+    setShowEmergencyForm(false);
+    setShowHospitalSelection(true);
+    // Simulate finding nearest hospital
+    setTimeout(() => {
+      const nearestHospital = { name: 'City General Hospital', distance: '2.3 km', eta: '8-12 min' };
+      setSelectedHospital(nearestHospital);
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(JSON.stringify({
+          type: 'markEmergencyHospital',
+          hospital: nearestHospital
+        }));
+      }
+      setShowHospitalSelection(false);
+      setShowFinalConfirmation(true);
+    }, 2000);
+  };
+
+  const handleFinalConfirm = () => {
+    setShowFinalConfirmation(false);
+    setShowEmergencyDashboard(true);
+    setPanelPosition(height * 0.5);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.5,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+    
+    // Show route on map
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'showRoute',
+        userLocation,
+        hospital: selectedHospital
+      }));
+    }
+  };
+
+  const conditions = [
+    'Heart Attack', 'Stroke', 'Breathing Problems', 'Chest Pain', 
+    'Severe Injury', 'Unconscious', 'Severe Bleeding', 'Other'
+  ];
+
+  const handleEmergencyCancel = () => {
+    setShowEmergencyModal(false);
+    setShowEmergencyForm(false);
+    setShowEmergencyDashboard(false);
+    setShowHospitalSelection(false);
+    setShowFinalConfirmation(false);
+    setSelectedService(null);
+    setSelectedHospital(null);
+    setEmergencyData({ condition: '', severity: '', instructions: '' });
   };
 
   const handleBackToMenu = () => {
@@ -141,6 +244,14 @@ const HomeScreen = () => {
   const handleLogout = () => {
     setProfileMenuVisible(false);
     logout();
+  };
+
+  const snapToCurrentLocation = () => {
+    console.log('Snap button pressed!');
+    // Instantly center map on current user location
+    if (webViewRef.current) {
+      webViewRef.current.postMessage('centerOnUser');
+    }
   };
 
   const onPanGestureEvent = (event: any) => {
@@ -181,9 +292,192 @@ const HomeScreen = () => {
       <View style={styles.handle} />
       
       <ScrollView style={styles.panelContent} showsVerticalScrollIndicator={false}>
-        {showHospitalSearch ? (
+        {showHospitalSelection ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingTitle}>Finding Nearest Hospital...</Text>
+            <View style={styles.loadingSpinner}>
+              <Text style={styles.spinnerText}>🏥</Text>
+            </View>
+            <Text style={styles.loadingText}>Searching for the best available hospital</Text>
+          </View>
+        ) : showFinalConfirmation ? (
           <View>
-            {/* Hospital Search Header */}
+            <View style={styles.confirmationHeader}>
+              <Text style={styles.confirmationTitle}>Confirm Emergency Dispatch</Text>
+            </View>
+            
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Condition:</Text>
+                <Text style={styles.summaryValue}>{emergencyData.condition}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Severity:</Text>
+                <Text style={[styles.summaryValue, styles.severityValue]}>{emergencyData.severity}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Hospital:</Text>
+                <Text style={styles.summaryValue}>{selectedHospital?.name}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Distance:</Text>
+                <Text style={styles.summaryValue}>{selectedHospital?.distance}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>ETA:</Text>
+                <Text style={styles.summaryValue}>{selectedHospital?.eta}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.finalButtons}>
+              <TouchableOpacity style={styles.backToFormButton} onPress={() => {
+                setShowFinalConfirmation(false);
+                setShowEmergencyForm(true);
+              }}>
+                <Text style={styles.backToFormText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.finalConfirmButton} onPress={handleFinalConfirm}>
+                <Text style={styles.finalConfirmText}>🚨 BOOK AMBULANCE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : showEmergencyForm ? (
+          <View>
+            <View style={styles.emergencyHeader}>
+              <TouchableOpacity onPress={handleEmergencyCancel} style={styles.backButton}>
+                <Text style={styles.backIcon}>←</Text>
+              </TouchableOpacity>
+              <Text style={styles.emergencyTitle}>Emergency Details</Text>
+            </View>
+            
+            <View style={styles.formContainer}>
+              <Text style={styles.formLabel}>Severity Level *</Text>
+              <View style={styles.severityButtons}>
+                <TouchableOpacity 
+                  style={[styles.severityBtn, emergencyData.severity === 'Critical' && styles.selectedSeverity]}
+                  onPress={() => setEmergencyData({...emergencyData, severity: 'Critical'})}
+                >
+                  <Text style={[styles.severityText, emergencyData.severity === 'Critical' && styles.selectedSeverityText]}>Critical</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.severityBtn, emergencyData.severity === 'Urgent' && styles.selectedSeverity]}
+                  onPress={() => setEmergencyData({...emergencyData, severity: 'Urgent'})}
+                >
+                  <Text style={[styles.severityText, emergencyData.severity === 'Urgent' && styles.selectedSeverityText]}>Urgent</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.severityBtn, emergencyData.severity === 'Moderate' && styles.selectedSeverity]}
+                  onPress={() => setEmergencyData({...emergencyData, severity: 'Moderate'})}
+                >
+                  <Text style={[styles.severityText, emergencyData.severity === 'Moderate' && styles.selectedSeverityText]}>Moderate</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <Text style={styles.formLabel}>Visible Symptoms *</Text>
+              <View style={styles.dropdownContainer}>
+                <TouchableOpacity 
+                  style={styles.dropdown} 
+                  onPress={() => {
+                    const newDropdownState = !showConditionDropdown;
+                    setShowConditionDropdown(newDropdownState);
+                    
+                    if (newDropdownState) {
+                      // Expand panel fully when dropdown opens
+                      const targetHeight = height * 0.95;
+                      setPanelPosition(targetHeight);
+                      Animated.spring(panelHeight, {
+                        toValue: targetHeight,
+                        useNativeDriver: false,
+                        tension: 100,
+                        friction: 8,
+                      }).start();
+                    }
+                  }}
+                >
+                  <Text style={[styles.dropdownText, emergencyData.condition && styles.selectedText]}>
+                    {emergencyData.condition || 'Select symptoms...'}
+                  </Text>
+                  <Text style={styles.dropdownArrow}>▼</Text>
+                </TouchableOpacity>
+                
+                {showConditionDropdown && (
+                  <View style={styles.dropdownList}>
+                    {conditions.map((condition, index) => (
+                      <TouchableOpacity 
+                        key={index}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setEmergencyData({...emergencyData, condition});
+                          setShowConditionDropdown(false);
+                          
+                          // Normalize panel when option is selected
+                          const targetHeight = height * 0.85;
+                          setPanelPosition(targetHeight);
+                          Animated.spring(panelHeight, {
+                            toValue: targetHeight,
+                            useNativeDriver: false,
+                            tension: 100,
+                            friction: 8,
+                          }).start();
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{condition}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+              
+              <TouchableOpacity 
+                style={[styles.dispatchButton, (!emergencyData.condition || !emergencyData.severity) && styles.disabledButton]} 
+                onPress={handleEmergencySubmit}
+                disabled={!emergencyData.condition || !emergencyData.severity}
+              >
+                <Text style={styles.dispatchText}>CONTINUE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : showEmergencyDashboard ? (
+          <View>
+            <View style={styles.dashboardHeader}>
+              <Text style={styles.dashboardTitle}>🚨 Emergency Active</Text>
+              <TouchableOpacity onPress={handleEmergencyCancel}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.hospitalInfo}>
+              <Text style={styles.hospitalLabel}>Dispatched to:</Text>
+              <Text style={styles.hospitalName}>City General Hospital</Text>
+              <Text style={styles.hospitalDistance}>2.3 km away</Text>
+            </View>
+            
+            <View style={styles.ambulanceStatus}>
+              <View style={styles.statusRow}>
+                <Text style={styles.statusLabel}>Ambulance ETA:</Text>
+                <Text style={styles.etaText}>{ambulanceETA}</Text>
+              </View>
+              <View style={styles.statusRow}>
+                <Text style={styles.statusLabel}>Driver:</Text>
+                <Text style={styles.driverText}>Rajesh Kumar</Text>
+              </View>
+              <View style={styles.statusRow}>
+                <Text style={styles.statusLabel}>Vehicle:</Text>
+                <Text style={styles.vehicleText}>DL-01-AB-1234</Text>
+              </View>
+            </View>
+            
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={styles.callButton}>
+                <Text style={styles.callText}>📞 Call Driver</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.chatButton}>
+                <Text style={styles.chatText}>💬 Live Chat</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : showHospitalSearch ? (
+          <View>
             <View style={styles.searchHeader}>
               <TouchableOpacity onPress={handleBackToMenu} style={styles.backButton}>
                 <Text style={styles.backIcon}>←</Text>
@@ -191,7 +485,6 @@ const HomeScreen = () => {
               <Text style={styles.searchTitle}>Select Hospital</Text>
             </View>
             
-            {/* Search Bar */}
             <View style={styles.searchContainer}>
               <TextInput
                 style={styles.searchInput}
@@ -202,7 +495,6 @@ const HomeScreen = () => {
               />
             </View>
             
-            {/* Hospital List */}
             <View style={styles.hospitalList}>
               <TouchableOpacity style={styles.hospitalItem}>
                 <Text style={styles.hospitalName}>City General Hospital</Text>
@@ -222,59 +514,29 @@ const HomeScreen = () => {
           <View>
             <Text style={styles.panelTitle}>Book Ambulance</Text>
             
-            {/* Emergency Option */}
-        <TouchableOpacity
-          style={[
-            styles.serviceCard,
-            selectedService === 'emergency' && styles.selectedServiceCard
-          ]}
-          onPress={() => handleServiceSelect('emergency')}
-        >
-          <View style={styles.serviceIcon}>
-            <Text style={styles.serviceEmoji}>🚨</Text>
-          </View>
-          <View style={styles.serviceInfo}>
-            <Text style={styles.serviceName}>Emergency</Text>
-            <Text style={styles.serviceDesc}>Immediate medical assistance</Text>
-          </View>
-          <Text style={styles.serviceArrow}>›</Text>
-        </TouchableOpacity>
-
-        {/* Accident Option */}
-        <TouchableOpacity
-          style={[
-            styles.serviceCard,
-            selectedService === 'accident' && styles.selectedServiceCard
-          ]}
-          onPress={() => handleServiceSelect('accident')}
-        >
-          <View style={styles.serviceIcon}>
-            <Text style={styles.serviceEmoji}>🚑</Text>
-          </View>
-          <View style={styles.serviceInfo}>
-            <Text style={styles.serviceName}>Accident</Text>
-            <Text style={styles.serviceDesc}>Road accident & trauma care</Text>
-          </View>
-          <Text style={styles.serviceArrow}>›</Text>
-        </TouchableOpacity>
-
-        {/* Hospital Selection Option */}
-        <TouchableOpacity
-          style={[
-            styles.serviceCard,
-            selectedService === 'hospital' && styles.selectedServiceCard
-          ]}
-          onPress={() => handleServiceSelect('hospital')}
-        >
-          <View style={styles.serviceIcon}>
-            <Text style={styles.serviceEmoji}>🏥</Text>
-          </View>
-          <View style={styles.serviceInfo}>
-            <Text style={styles.serviceName}>Select Hospital</Text>
-            <Text style={styles.serviceDesc}>Choose specific hospital</Text>
-          </View>
-          <Text style={styles.serviceArrow}>›</Text>
-        </TouchableOpacity>
+            <ServiceCard
+              emoji="🚨"
+              name="Emergency"
+              description="Immediate medical assistance"
+              selected={selectedService === 'emergency'}
+              onPress={() => handleServiceSelect('emergency')}
+            />
+            
+            <ServiceCard
+              emoji="🚑"
+              name="Accident"
+              description="Road accident & trauma care"
+              selected={selectedService === 'accident'}
+              onPress={() => handleServiceSelect('accident')}
+            />
+            
+            <ServiceCard
+              emoji="🏥"
+              name="Select Hospital"
+              description="Choose specific hospital"
+              selected={selectedService === 'hospital'}
+              onPress={() => handleServiceSelect('hospital')}
+            />
 
         {/* Show additional content when service is selected */}
         {selectedService && (
@@ -307,115 +569,33 @@ const HomeScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
-      {/* Map */}
-      <View style={styles.mapContainer}>
-        <WebView
-          style={styles.map}
-          source={{
-            html: `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-                <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-                <style>
-                  body { margin: 0; padding: 0; }
-                  #map { height: 100vh; width: 100vw; }
-                </style>
-              </head>
-              <body>
-                <div id="map"></div>
-                <script>
-                  var map = L.map('map').setView([${userLocation.latitude || 28.6139}, ${userLocation.longitude || 77.2090}], 15);
-                  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                  
-                  // Add markers
-                  L.marker([${(userLocation.latitude || 28.6139) + 0.01}, ${(userLocation.longitude || 77.2090) + 0.01}])
-                    .addTo(map).bindPopup('City General Hospital<br>2.3 km away');
-                  L.marker([${(userLocation.latitude || 28.6139) - 0.01}, ${(userLocation.longitude || 77.2090) - 0.01}])
-                    .addTo(map).bindPopup('Metro Medical Center<br>3.1 km away');
-                  L.marker([${(userLocation.latitude || 28.6139) + 0.005}, ${(userLocation.longitude || 77.2090) - 0.015}])
-                    .addTo(map).bindPopup('Central Care Hospital<br>4.2 km away');
-                </script>
-              </body>
-              </html>
-            `
-          }}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-        />
-      </View>
+      <MapViewComponent 
+        webViewRef={webViewRef} 
+        userLocation={userLocation}
+        isEmergencyMode={showEmergencyDashboard}
+        selectedHospital={selectedHospital}
+      />
 
-      {/* Current Location Pin (centered) */}
-      <View style={styles.centerPin}>
-        <View style={styles.pinContainer}>
-          <View style={styles.pin} />
-          <View style={styles.pinShadow} />
-        </View>
-      </View>
 
-      {/* Top Navigation */}
-      <View style={styles.topContainer}>
-        {/* Menu Button */}
-        <TouchableOpacity style={styles.menuButton}>
-          <Text style={styles.menuIcon}>☰</Text>
-        </TouchableOpacity>
 
-        {/* Address Bar */}
-        <View style={styles.addressBar}>
-          <Text style={styles.addressText} numberOfLines={1}>
-            {address}
-          </Text>
-        </View>
+      {/* Location Snap Button */}
+      <LocationSnapButton onPress={snapToCurrentLocation} />
 
-        {/* Profile Button */}
-        <TouchableOpacity 
-          style={styles.profileButton}
-          onPress={() => setProfileMenuVisible(!profileMenuVisible)}
-        >
-          <Text style={styles.profileIcon}>👤</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Profile Menu */}
-      {profileMenuVisible && (
-        <View style={styles.profileMenu}>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => {
-              console.log('Profile');
-              setProfileMenuVisible(false);
-            }}
-          >
-            <Text style={styles.menuText}>Profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => {
-              console.log('Medical History');
-              setProfileMenuVisible(false);
-            }}
-          >
-            <Text style={styles.menuText}>Medical History</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => {
-              console.log('Emergency Contacts');
-              setProfileMenuVisible(false);
-            }}
-          >
-            <Text style={styles.menuText}>Emergency Contacts</Text>
-          </TouchableOpacity>
-          <View style={styles.menuDivider} />
-          <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-            <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <TopNavigation 
+        userName={userName}
+        address={address}
+        profileMenuVisible={profileMenuVisible}
+        onProfilePress={() => setProfileMenuVisible(!profileMenuVisible)}
+        onLogout={handleLogout}
+      />
 
       {renderBottomPanel()}
+      
+      <EmergencyModal
+        visible={showEmergencyModal}
+        onCancel={handleEmergencyCancel}
+        onConfirm={handleEmergencyConfirm}
+      />
     </View>
     </GestureHandlerRootView>
   );
@@ -431,145 +611,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
 
-  // Map Container
-  mapContainer: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
 
-  // Center Pin
-  centerPin: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -12,
-    marginTop: -24,
-    zIndex: 5,
-  },
-  pinContainer: {
-    alignItems: 'center',
-  },
-  pin: {
-    width: 24,
-    height: 24,
-    backgroundColor: '#000',
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 8,
-  },
-  pinShadow: {
-    width: 6,
-    height: 6,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 3,
-    marginTop: 2,
-  },
-
-  // Top Navigation
-  topContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 30,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  menuIcon: {
-    fontSize: 18,
-    color: '#000',
-  },
-  addressBar: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  addressText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000',
-  },
-  profileButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#000',
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  profileIcon: {
-    fontSize: 18,
-    color: '#fff',
-  },
-
-  // Profile Menu
-  profileMenu: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 80,
-    right: 20,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    minWidth: 180,
-    paddingVertical: 8,
-    zIndex: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  menuItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  menuText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#000',
-  },
-  logoutText: {
-    color: '#ff0000',
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: '#f0f0f0',
-    marginVertical: 4,
-    marginHorizontal: 16,
-  },
 
   // Bottom Panel (Fixed)
   bottomPanel: {
@@ -607,56 +649,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  // Service Cards
-  serviceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  selectedServiceCard: {
-    borderColor: '#000',
-    backgroundColor: '#fafafa',
-  },
-  serviceIcon: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  serviceEmoji: {
-    fontSize: 24,
-  },
-  serviceInfo: {
-    flex: 1,
-  },
-  serviceName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 2,
-  },
-  serviceDesc: {
-    fontSize: 14,
-    color: '#666',
-  },
-  serviceArrow: {
-    fontSize: 20,
-    color: '#ccc',
-    marginLeft: 8,
-  },
+
 
   // Selected Content
   selectedContent: {
@@ -740,6 +733,297 @@ const styles = StyleSheet.create({
   hospitalDistance: {
     fontSize: 14,
     color: '#666',
+  },
+
+
+
+  // Emergency Form
+  emergencyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  emergencyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ff0000',
+  },
+  formContainer: {
+    gap: 16,
+  },
+  formLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 8,
+  },
+  dropdown: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  selectedText: {
+    color: '#000',
+    fontWeight: '600',
+  },
+  dropdownContainer: {
+    position: 'relative',
+    zIndex: 1,
+    marginBottom: 20,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: '#666',
+  },
+  dropdownList: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginTop: 4,
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: '#000',
+  },
+  selectedSeverity: {
+    backgroundColor: '#fff',
+    borderColor: '#000',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+  },
+  severityButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  severityBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    borderWidth: 2,
+    borderColor: '#f8f8f8',
+  },
+  severityText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  selectedSeverityText: {
+    color: '#000',
+  },
+  dispatchButton: {
+    backgroundColor: '#ff0000',
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  dispatchText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  // Emergency Dashboard
+  dashboardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dashboardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ff0000',
+  },
+  cancelText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  hospitalInfo: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  hospitalLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  ambulanceStatus: {
+    backgroundColor: '#e8f5e8',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  statusLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  etaText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#00aa00',
+  },
+  driverText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+  },
+  vehicleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  callButton: {
+    flex: 1,
+    backgroundColor: '#00aa00',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  callText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  chatButton: {
+    flex: 1,
+    backgroundColor: '#0066cc',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  chatText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
+  // Hospital Selection Loading
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ff0000',
+    marginBottom: 20,
+  },
+  loadingSpinner: {
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  spinnerText: {
+    fontSize: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+
+  // Final Confirmation
+  confirmationHeader: {
+    marginBottom: 20,
+  },
+  confirmationTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ff0000',
+    textAlign: 'center',
+  },
+  summaryContainer: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  severityValue: {
+    color: '#ff0000',
+  },
+  finalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  backToFormButton: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  backToFormText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  finalConfirmButton: {
+    flex: 2,
+    backgroundColor: '#ff0000',
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  finalConfirmText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
 

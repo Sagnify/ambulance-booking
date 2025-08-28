@@ -30,6 +30,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [contentVisible, setContentVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // For Web Alert Fallback
   const showAlert = (title: string, message: string) => {
@@ -64,6 +65,7 @@ export default function LoginScreen({ navigation }: Props) {
 
 
   const handlePhoneContinue = async () => {
+    setLoading(true);
     try {
       if (!phoneNumber || phoneNumber.length < 8) {
         showAlert('Error', 'Please enter a valid phone number.');
@@ -101,10 +103,12 @@ export default function LoginScreen({ navigation }: Props) {
         showAlert('Error', 'Could not connect to server.');
       }
     }
+    setLoading(false);
   };
 
 
   const handleOtpVerify = async () => {
+    setLoading(true);
     try {
       if (!otp || otp.length < 4) {
         showAlert('Error', 'Please enter a valid OTP.');
@@ -134,6 +138,7 @@ export default function LoginScreen({ navigation }: Props) {
         showAlert('Error', 'Could not connect to server.');
       }
     }
+    setLoading(false);
   };
 
   const handleSignupNavigation = () => {
@@ -175,7 +180,7 @@ export default function LoginScreen({ navigation }: Props) {
                 { backgroundColor: phoneNumber.length > 0 ? '#000000' : '#E0E0E0' }
               ]}
               onPress={handlePhoneContinue}
-              disabled={phoneNumber.length === 0}
+              disabled={phoneNumber.length === 0 || loading}
               activeOpacity={0.9}
             >
               <Text
@@ -184,7 +189,7 @@ export default function LoginScreen({ navigation }: Props) {
                   { color: phoneNumber.length > 0 ? '#FFFFFF' : '#A0A0A0' }
                 ]}
               >
-                Continue
+                {loading ? 'Checking...' : 'Continue'}
               </Text>
             </TouchableOpacity>
 
@@ -218,7 +223,7 @@ export default function LoginScreen({ navigation }: Props) {
                 { backgroundColor: otp.length > 0 ? '#000000' : '#E0E0E0' }
               ]}
               onPress={handleOtpVerify}
-              disabled={otp.length === 0}
+              disabled={otp.length === 0 || loading}
               activeOpacity={0.9}
             >
               <Text
@@ -227,7 +232,7 @@ export default function LoginScreen({ navigation }: Props) {
                   { color: otp.length > 0 ? '#FFFFFF' : '#A0A0A0' }
                 ]}
               >
-                Verify
+                {loading ? 'Verifying...' : 'Verify'}
               </Text>
             </TouchableOpacity>
           </>
