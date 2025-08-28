@@ -1,53 +1,64 @@
 from flask import Blueprint, request, jsonify
 from .models import User, db
 from .otp_routes import send_otp, verify_otp
+import traceback
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
-    data = request.get_json()
-    phone_number = data.get('phone_number')
-    
-    if not phone_number:
-        return jsonify({'error': 'Phone number is required'}), 400
-    
-    # Check if user already exists
-    existing_user = User.query.filter_by(phone_number=phone_number).first()
-    if existing_user:
-        return jsonify({'error': 'User already exists'}), 409
-    
-    # Send OTP for verification
-    otp_response = send_otp(phone_number)
-    if otp_response[1] != 200:
-        return otp_response
-    
-    return jsonify({'message': 'OTP sent for signup verification'}), 200
+    try:
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        
+        if not phone_number:
+            return jsonify({'error': 'Phone number is required'}), 400
+        
+        # Check if user already exists
+        existing_user = User.query.filter_by(phone_number=phone_number).first()
+        if existing_user:
+            return jsonify({'error': 'User already exists'}), 409
+        
+        # Send OTP for verification
+        otp_response = send_otp(phone_number)
+        if otp_response[1] != 200:
+            return otp_response
+        
+        return jsonify({'message': 'OTP sent for signup verification'}), 200
+    except Exception as e:
+        print(f"Signup error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/signup/verify', methods=['POST'])
 def signup_verify():
-    data = request.get_json()
-    phone_number = data.get('phone_number')
-    otp = data.get('otp')
-    
-    if not phone_number or not otp:
-        return jsonify({'error': 'Phone number and OTP are required'}), 400
-    
-    # Verify OTP
-    verify_response = verify_otp(phone_number, otp)
-    if verify_response[1] != 200:
-        return verify_response
-    
-    # Create new user
-    user = User(phone_number=phone_number)
-    db.session.add(user)
-    db.session.commit()
-    
-    return jsonify({
-        'message': 'User created successfully',
-        'user_id': user.id,
-        'phone_number': user.phone_number
-    }), 201
+    try:
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        otp = data.get('otp')
+        
+        if not phone_number or not otp:
+            return jsonify({'error': 'Phone number and OTP are required'}), 400
+        
+        # Verify OTP
+        verify_response = verify_otp(phone_number, otp)
+        if verify_response[1] != 200:
+            return verify_response
+        
+        # Create new user
+        user = User(phone_number=phone_number)
+        db.session.add(user)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'User created successfully',
+            'user_id': user.id,
+            'phone_number': user.phone_number
+        }), 201
+    except Exception as e:
+        print(f"Signup verify error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
