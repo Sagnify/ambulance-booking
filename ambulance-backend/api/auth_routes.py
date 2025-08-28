@@ -142,3 +142,22 @@ def update_profile():
             'emergency_contacts': user.emergency_contacts
         }
     }), 200
+
+@auth_bp.route('/users', methods=['GET'])
+def get_all_users():
+    try:
+        users = User.query.all()
+        users_data = []
+        for user in users:
+            users_data.append({
+                'id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'address': user.address,
+                'emergency_contacts': user.emergency_contacts,
+                'created_at': user.created_at.isoformat() if user.created_at else None
+            })
+        return jsonify({'users': users_data}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
