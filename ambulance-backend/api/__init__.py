@@ -22,4 +22,11 @@ def create_app(config_name=None):
     bcrypt.init_app(app)
     jwt.init_app(app)
 
+    # Register blueprints
+    from .otp_routes import otp_bp
+    from .auth_routes import auth_bp
+    app.register_blueprint(otp_bp)
+    app.register_blueprint(auth_bp)
+    
+
     return app
