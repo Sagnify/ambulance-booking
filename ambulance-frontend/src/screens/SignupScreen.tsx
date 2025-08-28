@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, LayoutAnimation,
-  Platform, UIManager
+  Platform, UIManager, Alert
 } from 'react-native';
 import BackButton from '../components/BackButton';
+import API  from '../../services/api';
+
+// const API_BASE = 'http://localhost:5000/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -18,6 +21,7 @@ export default function SignupScreen() {
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setTimeout(() => {
@@ -28,6 +32,63 @@ export default function SignupScreen() {
 
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
+
+  const sendOTP = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number: phone })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        nextStep();
+      } else {
+        Alert.alert('Error', data.error);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error');
+    }
+    setLoading(false);
+  };
+
+  const verifyOTP = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/auth/signup/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number: phone, otp })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        nextStep();
+      } else {
+        Alert.alert('Error', data.error);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error');
+    }
+    setLoading(false);
+  };
+
+  const updateProfile = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/auth/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 1, name, address })
+      });
+      if (response.ok) {
+        Alert.alert('Success', 'Account created successfully!');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update profile');
+    }
+    setLoading(false);
+  };
 
   const handleLocationAccess = (granted: boolean) => {
     if (granted) {
@@ -65,10 +126,12 @@ export default function SignupScreen() {
             </View>
             <TouchableOpacity
               style={[styles.button, { backgroundColor: phone ? '#000' : '#E0E0E0' }]}
-              disabled={!phone}
-              onPress={nextStep}
+              disabled={!phone || loading}
+              onPress={sendOTP}
             >
-              <Text style={[styles.buttonText, { color: phone ? '#FFF' : '#A0A0A0' }]}>Continue</Text>
+              <Text style={[styles.buttonText, { color: phone ? '#FFF' : '#A0A0A0' }]}>
+                {loading ? 'Sending...' : 'Continue'}
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -89,10 +152,12 @@ export default function SignupScreen() {
             </View>
             <TouchableOpacity
               style={[styles.button, { backgroundColor: otp ? '#000' : '#E0E0E0' }]}
-              disabled={!otp}
-              onPress={nextStep}
+              disabled={!otp || loading}
+              onPress={verifyOTP}
             >
-              <Text style={[styles.buttonText, { color: otp ? '#FFF' : '#A0A0A0' }]}>Verify</Text>
+              <Text style={[styles.buttonText, { color: otp ? '#FFF' : '#A0A0A0' }]}>
+                {loading ? 'Verifying...' : 'Verify'}
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -146,10 +211,12 @@ export default function SignupScreen() {
             </View>
             <TouchableOpacity
               style={[styles.button, { backgroundColor: address ? '#000' : '#E0E0E0' }]}
-              disabled={!address}
-              onPress={() => console.log('Signup Complete')}
+              disabled={!address || loading}
+              onPress={updateProfile}
             >
-              <Text style={[styles.buttonText, { color: address ? '#FFF' : '#A0A0A0' }]}>Finish</Text>
+              <Text style={[styles.buttonText, { color: address ? '#FFF' : '#A0A0A0' }]}>
+                {loading ? 'Creating...' : 'Finish'}
+              </Text>
             </TouchableOpacity>
           </>
         )}
