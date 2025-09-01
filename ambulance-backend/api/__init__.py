@@ -26,17 +26,36 @@ def create_app(config_name=None):
     from .otp_routes import otp_bp
     from .auth_routes import auth_bp
     from .health_routes import health_bp
+    from .hospital_routes import hospital_bp
     app.register_blueprint(otp_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(hospital_bp)
 
     @app.route('/')
     def api_list():
+        from .models import Hospital
+        
+        # Get hospital count
+        try:
+            hospital_count = Hospital.query.count()
+        except:
+            hospital_count = 0
+            
         return {
             "message": "Ambulance Booking API",
+            "statistics": {
+                "total_hospitals": hospital_count,
+                "total_organizations": hospital_count  # Same as hospitals for now
+            },
             "endpoints": {
                 "Health Routes": {
                     "GET /api/health/check": "Check server and database status"
+                },
+                "Hospital Routes": {
+                    "GET /api/hospitals": "Get list of all hospitals and organizations",
+                    "GET /api/hospitals/nearby": "Get nearby hospitals (params: lat, lng, radius)",
+                    "POST /api/hospitals/seed": "Populate database with Kolkata hospitals (sample data)"
                 },
                 "OTP Routes": {
                     "POST /api/otp/send": "Send OTP to phone number",

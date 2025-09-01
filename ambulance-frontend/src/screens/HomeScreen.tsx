@@ -29,8 +29,8 @@ const HomeScreen = () => {
   const { logout } = useAuth();
   const [address, setAddress] = useState('Fetching location...');
   const [userLocation, setUserLocation] = useState({ 
-    latitude: 28.6139, 
-    longitude: 77.2090 
+    latitude: 22.4675, 
+    longitude: 88.3732 
   });
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const [selectedService, setSelectedService] = useState<'emergency' | 'accident' | 'hospital' | null>(null);
@@ -56,14 +56,12 @@ const HomeScreen = () => {
   const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
   const [selectedHospital, setSelectedHospital] = useState<{name: string, distance: string, eta: string} | null>(null);
   const [ambulanceETA, setAmbulanceETA] = useState('8-12 min');
-  const [markers] = useState([
-    { id: 1, x: '30%', y: '25%', type: 'hospital', name: 'City General Hospital' },
-    { id: 2, x: '70%', y: '40%', type: 'ambulance', name: 'Ambulance Unit 1' },
-    { id: 3, x: '45%', y: '60%', type: 'hospital', name: 'Metro Medical Center' },
-    { id: 4, x: '20%', y: '70%', type: 'ambulance', name: 'Ambulance Unit 2' },
-  ]);
+  const [hospitalData, setHospitalData] = useState<any[]>([]);
+  const [ambulanceData, setAmbulanceData] = useState<any[]>([]);
+  const [searchRadius, setSearchRadius] = useState(5);
+  const [showRadiusControl, setShowRadiusControl] = useState(false);
 
-  // Get user location
+  // Get user location and nearby services
   useEffect(() => {
     const getLocation = async () => {
       try {
@@ -91,6 +89,9 @@ const HomeScreen = () => {
           const readableAddress = `${location.street || ''} ${location.city || ''}, ${location.region || ''}`.trim();
           setAddress(readableAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         }
+        
+        // Fetch nearby hospitals and ambulances
+        await fetchNearbyServices(latitude, longitude, searchRadius);
       } catch (error) {
         console.error('Location error:', error);
         setAddress('Current location');
@@ -99,6 +100,40 @@ const HomeScreen = () => {
 
     getLocation();
   }, []);
+  
+  // Fetch nearby hospitals and ambulances from API
+  const fetchNearbyServices = async (lat: number, lng: number, radius: number = searchRadius) => {
+    try {
+      // Try to fetch from API - replace with actual endpoints
+      const [hospitalsResponse, ambulancesResponse] = await Promise.allSettled([
+        API.get(`/api/hospitals/nearby?lat=${lat}&lng=${lng}&radius=${radius}`),
+        API.get(`/api/ambulances/nearby?lat=${lat}&lng=${lng}&radius=${radius}`)
+      ]);
+      
+      // Set hospital data if API succeeds
+      if (hospitalsResponse.status === 'fulfilled' && hospitalsResponse.value.data.hospitals) {
+        setHospitalData(hospitalsResponse.value.data.hospitals);
+      } else {
+        setHospitalData([]);
+      }
+      
+      // Set ambulance data if API succeeds
+      if (ambulancesResponse.status === 'fulfilled' && ambulancesResponse.value.data.ambulances) {
+        setAmbulanceData(ambulancesResponse.value.data.ambulances);
+      } else {
+        setAmbulanceData([]);
+      }
+    } catch (error) {
+      console.log('API not available, no hospitals to show');
+      setHospitalData([]);
+      setAmbulanceData([]);
+    }
+  };
+  
+  const handleRadiusChange = async (newRadius: number) => {
+    setSearchRadius(newRadius);
+    await fetchNearbyServices(userLocation.latitude, userLocation.longitude, newRadius);
+  };
 
   // Get user data
   useEffect(() => {
@@ -183,18 +218,43 @@ const HomeScreen = () => {
   const handleEmergencySubmit = () => {
     setShowEmergencyForm(false);
     setShowHospitalSelection(true);
-    // Simulate finding nearest hospital
+    
+    // Pan down to show more map during hospital selection
+    setPanelPosition(height * 0.3);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.3,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+    
+    // Simulate finding nearest hospital - ready for API integration
     setTimeout(() => {
-      const nearestHospital = { name: 'City General Hospital', distance: '2.3 km', eta: '8-12 min' };
+      const nearestHospital = { 
+        name: 'City General Hospital', 
+        distance: '2.3 km', 
+        eta: '8-12 min',
+        lat: userLocation.latitude + 0.01,
+        lng: userLocation.longitude + 0.01
+      };
       setSelectedHospital(nearestHospital);
       if (webViewRef.current) {
         webViewRef.current.postMessage(JSON.stringify({
-          type: 'markEmergencyHospital',
+          type: 'showEmergencyHospital',
           hospital: nearestHospital
         }));
       }
       setShowHospitalSelection(false);
       setShowFinalConfirmation(true);
+      
+      // Pan up to show confirmation details
+      setPanelPosition(height * 0.7);
+      Animated.spring(panelHeight, {
+        toValue: height * 0.7,
+        useNativeDriver: false,
+        tension: 100,
+        friction: 8,
+      }).start();
     }, 2000);
   };
 
@@ -208,15 +268,7 @@ const HomeScreen = () => {
       tension: 100,
       friction: 8,
     }).start();
-    
-    // Show route on map
-    if (webViewRef.current) {
-      webViewRef.current.postMessage(JSON.stringify({
-        type: 'showRoute',
-        userLocation,
-        hospital: selectedHospital
-      }));
-    }
+    // Route is already shown when hospital was selected
   };
 
   const conditions = [
@@ -233,12 +285,22 @@ const HomeScreen = () => {
     setSelectedService(null);
     setSelectedHospital(null);
     setEmergencyData({ condition: '', severity: '', instructions: '' });
+    
+    // Revert map to normal mode
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({ type: 'showNormalHospitals' }));
+    }
   };
 
   const handleBackToMenu = () => {
     setShowHospitalSearch(false);
     setSelectedService(null);
     setHospitalSearch('');
+    
+    // Revert map to normal mode
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({ type: 'showNormalHospitals' }));
+    }
   };
 
   const handleLogout = () => {
@@ -248,7 +310,6 @@ const HomeScreen = () => {
 
   const snapToCurrentLocation = () => {
     console.log('Snap button pressed!');
-    // Instantly center map on current user location
     if (webViewRef.current) {
       webViewRef.current.postMessage('centerOnUser');
     }
@@ -496,18 +557,21 @@ const HomeScreen = () => {
             </View>
             
             <View style={styles.hospitalList}>
-              <TouchableOpacity style={styles.hospitalItem}>
-                <Text style={styles.hospitalName}>City General Hospital</Text>
-                <Text style={styles.hospitalDistance}>2.3 km away</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.hospitalItem}>
-                <Text style={styles.hospitalName}>Metro Medical Center</Text>
-                <Text style={styles.hospitalDistance}>3.1 km away</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.hospitalItem}>
-                <Text style={styles.hospitalName}>Central Care Hospital</Text>
-                <Text style={styles.hospitalDistance}>4.2 km away</Text>
-              </TouchableOpacity>
+              {hospitalData.length > 0 ? (
+                hospitalData
+                  .filter(hospital => 
+                    hospital.name.toLowerCase().includes(hospitalSearch.toLowerCase())
+                  )
+                  .map((hospital, index) => (
+                    <TouchableOpacity key={hospital.id || index} style={styles.hospitalItem}>
+                      <Text style={styles.hospitalName}>{hospital.name}</Text>
+                      <Text style={styles.hospitalDistance}>{hospital.distance} km away</Text>
+                      <Text style={styles.hospitalType}>{hospital.type}</Text>
+                    </TouchableOpacity>
+                  ))
+              ) : (
+                <Text style={styles.noHospitalsText}>No hospitals found in {searchRadius}km radius</Text>
+              )}
             </View>
           </View>
         ) : (
@@ -572,14 +636,47 @@ const HomeScreen = () => {
       <MapViewComponent 
         webViewRef={webViewRef} 
         userLocation={userLocation}
-        isEmergencyMode={showEmergencyDashboard}
+        mapMode={showEmergencyDashboard || showFinalConfirmation ? 'emergency' : 'normal'}
         selectedHospital={selectedHospital}
+        hospitalData={hospitalData}
+        ambulanceData={ambulanceData}
       />
 
 
 
       {/* Location Snap Button */}
       <LocationSnapButton onPress={snapToCurrentLocation} />
+      
+      {/* Radius Control Button */}
+      <TouchableOpacity 
+        style={styles.radiusButton}
+        onPress={() => setShowRadiusControl(!showRadiusControl)}
+      >
+        <Text style={styles.radiusButtonText}>{searchRadius}km</Text>
+      </TouchableOpacity>
+      
+      {/* Radius Control Panel */}
+      {showRadiusControl && (
+        <View style={styles.radiusPanel}>
+          <Text style={styles.radiusPanelTitle}>Search Radius</Text>
+          <View style={styles.radiusOptions}>
+            {[2, 5, 10, 15, 20].map((radius) => (
+              <TouchableOpacity
+                key={radius}
+                style={[styles.radiusOption, searchRadius === radius && styles.selectedRadius]}
+                onPress={() => {
+                  handleRadiusChange(radius);
+                  setShowRadiusControl(false);
+                }}
+              >
+                <Text style={[styles.radiusOptionText, searchRadius === radius && styles.selectedRadiusText]}>
+                  {radius}km
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
 
       <TopNavigation 
         userName={userName}
@@ -733,6 +830,18 @@ const styles = StyleSheet.create({
   hospitalDistance: {
     fontSize: 14,
     color: '#666',
+  },
+  hospitalType: {
+    fontSize: 12,
+    color: '#007AFF',
+    textTransform: 'capitalize',
+    marginTop: 2,
+  },
+  noHospitalsText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 20,
   },
 
 
@@ -1023,6 +1132,71 @@ const styles = StyleSheet.create({
   finalConfirmText: {
     fontSize: 16,
     fontWeight: '700',
+    color: '#fff',
+  },
+  
+  // Radius Control Styles
+  radiusButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 80,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 25,
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  radiusButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  radiusPanel: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 160 : 140,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    minWidth: 120,
+  },
+  radiusPanelTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  radiusOptions: {
+    gap: 8,
+  },
+  radiusOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f8f8f8',
+    alignItems: 'center',
+  },
+  selectedRadius: {
+    backgroundColor: '#007AFF',
+  },
+  radiusOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  selectedRadiusText: {
     color: '#fff',
   },
 });

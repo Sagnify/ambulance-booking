@@ -23,6 +23,11 @@ class Hospital(db.Model, TimestampMixin):
     address = db.Column(db.Text, nullable=True)
     contact_number = db.Column(db.String(32), nullable=True)
     email = db.Column(db.String(255), nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    type = db.Column(db.String(50), nullable=True)
+    emergency_services = db.Column(db.Boolean, default=True)
+    ambulance_count = db.Column(db.Integer, default=0)
     
     drivers = db.relationship('Driver', back_populates='hospital', lazy='dynamic')
 

@@ -5,17 +5,19 @@ import { WebView } from 'react-native-webview';
 interface MapViewProps {
   webViewRef: React.RefObject<any>;
   userLocation: { latitude: number; longitude: number };
-  isEmergencyMode?: boolean;
-  selectedHospital?: { name: string; distance: string; eta: string } | null;
+  mapMode: 'normal' | 'emergency';
+  selectedHospital?: { name: string; distance: string; eta: string; lat?: number; lng?: number } | null;
+  hospitalData?: any[];
+  ambulanceData?: any[];
 }
 
-const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, isEmergencyMode = false, selectedHospital = null }) => {
+const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, mapMode, selectedHospital = null, hospitalData = [], ambulanceData = [] }) => {
   return (
     <View style={styles.mapContainer}>
       <WebView
         ref={webViewRef}
         style={styles.map}
-        key={`${userLocation.latitude}-${userLocation.longitude}-${isEmergencyMode}`}
+        key={`${userLocation.latitude}-${userLocation.longitude}-${mapMode}`}
         source={{
           html: `
             <!DOCTYPE html>
@@ -32,56 +34,32 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, is
             <body>
               <div id="map"></div>
               <script>
-                var map = L.map('map').setView([${userLocation.latitude || 28.6139}, ${userLocation.longitude || 77.2090}], 15);
+                var map = L.map('map').setView([${userLocation.latitude}, ${userLocation.longitude}], 15);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                 
-                // Hospital markers data
-                var hospitals = [
-                  { lat: ${(userLocation.latitude || 28.6139) + 0.01}, lng: ${(userLocation.longitude || 77.2090) + 0.01}, name: 'City General Hospital', distance: '2.3 km' },
-                  { lat: ${(userLocation.latitude || 28.6139) - 0.01}, lng: ${(userLocation.longitude || 77.2090) - 0.01}, name: 'Metro Medical Center', distance: '3.1 km' },
-                  { lat: ${(userLocation.latitude || 28.6139) + 0.005}, lng: ${(userLocation.longitude || 77.2090) - 0.015}, name: 'Central Care Hospital', distance: '4.2 km' },
-                  { lat: ${(userLocation.latitude || 28.6139) - 0.008}, lng: ${(userLocation.longitude || 77.2090) + 0.012}, name: 'Emergency Medical Center', distance: '1.8 km' },
-                  { lat: ${(userLocation.latitude || 28.6139) + 0.015}, lng: ${(userLocation.longitude || 77.2090) - 0.005}, name: 'Regional Hospital', distance: '3.7 km' }
-                ];
+                // Fixed radius for nearby hospitals (in degrees, ~5km radius)
+                var searchRadius = 0.045;
                 
-                // Ambulance units data
-                var ambulances = [
-                  { lat: ${(userLocation.latitude || 28.6139) + 0.008}, lng: ${(userLocation.longitude || 77.2090) + 0.008}, name: 'Ambulance Unit A1', eta: '5 min' },
-                  { lat: ${(userLocation.latitude || 28.6139) - 0.006}, lng: ${(userLocation.longitude || 77.2090) + 0.009}, name: 'Ambulance Unit B2', eta: '7 min' },
-                  { lat: ${(userLocation.latitude || 28.6139) + 0.012}, lng: ${(userLocation.longitude || 77.2090) - 0.008}, name: 'Ambulance Unit C3', eta: '9 min' }
-                ];
+                // Use only API data
+                var apiHospitals = ${JSON.stringify(hospitalData)};
+                var apiAmbulances = ${JSON.stringify(ambulanceData)};
+                var nearbyHospitals = (apiHospitals && apiHospitals.length > 0) ? apiHospitals.map(h => ({
+                  id: h.id,
+                  lat: h.latitude,
+                  lng: h.longitude,
+                  name: h.name,
+                  distance: h.distance + ' km',
+                  type: h.type
+                })) : [];
+                var nearbyAmbulances = (apiAmbulances && apiAmbulances.length > 0) ? apiAmbulances : [];
                 
                 var hospitalMarkers = [];
                 var ambulanceMarkers = [];
-                
-                // Create hospital markers
-                hospitals.forEach(function(hospital) {
-                  var marker = L.marker([hospital.lat, hospital.lng], {
-                    icon: L.divIcon({
-                      html: '🏥',
-                      iconSize: [25, 25],
-                      className: 'hospital-marker'
-                    })
-                  }).bindPopup(hospital.name + '<br>' + hospital.distance + ' away');
-                  hospitalMarkers.push(marker);
-                  if (!${isEmergencyMode}) marker.addTo(map);
-                });
-                
-                // Create ambulance markers
-                ambulances.forEach(function(ambulance) {
-                  var marker = L.marker([ambulance.lat, ambulance.lng], {
-                    icon: L.divIcon({
-                      html: '🚑',
-                      iconSize: [25, 25],
-                      className: 'ambulance-marker'
-                    })
-                  }).bindPopup(ambulance.name + '<br>ETA: ' + ambulance.eta);
-                  ambulanceMarkers.push(marker);
-                  if (!${isEmergencyMode}) marker.addTo(map);
-                });
+                var emergencyHospitalMarker = null;
+                var routeLine = null;
                 
                 // User location marker
-                var userMarker = L.circleMarker([${userLocation.latitude || 28.6139}, ${userLocation.longitude || 77.2090}], {
+                var userMarker = L.circleMarker([${userLocation.latitude}, ${userLocation.longitude}], {
                   color: '#007AFF',
                   fillColor: '#007AFF',
                   fillOpacity: 1,
@@ -89,143 +67,152 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, is
                   weight: 3
                 }).addTo(map);
                 
-                var emergencyHospitalMarker = null;
-                var routeLine = null;
+                // Function to show normal hospitals and ambulances
+                function showNormalHospitals() {
+                  // Clear existing markers
+                  hospitalMarkers.forEach(function(marker) { 
+                    if (map.hasLayer(marker)) map.removeLayer(marker); 
+                  });
+                  ambulanceMarkers.forEach(function(marker) { 
+                    if (map.hasLayer(marker)) map.removeLayer(marker); 
+                  });
+                  hospitalMarkers = [];
+                  ambulanceMarkers = [];
+                  
+                  // Add hospital markers
+                  nearbyHospitals.forEach(function(hospital) {
+                    var marker = L.marker([hospital.lat, hospital.lng], {
+                      icon: L.divIcon({
+                        html: '<div style="background: white; border: 2px solid #007AFF; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">🏥</div>',
+                        iconSize: [35, 35],
+                        className: 'hospital-marker'
+                      })
+                    }).bindPopup(hospital.name + '<br>' + hospital.distance + ' away<br>Type: ' + hospital.type);
+                    
+                    hospitalMarkers.push(marker);
+                    marker.addTo(map);
+                  });
+                  
+                  // Add ambulance markers
+                  nearbyAmbulances.forEach(function(ambulance) {
+                    var bgColor = ambulance.status === 'available' ? '#00AA00' : '#FF6B6B';
+                    var marker = L.marker([ambulance.lat, ambulance.lng], {
+                      icon: L.divIcon({
+                        html: '<div style="background: white; border: 2px solid ' + bgColor + '; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">🚑</div>',
+                        iconSize: [35, 35],
+                        className: 'ambulance-marker'
+                      })
+                    }).bindPopup(ambulance.name + '<br>ETA: ' + ambulance.eta + '<br>Status: ' + ambulance.status);
+                    
+                    ambulanceMarkers.push(marker);
+                    marker.addTo(map);
+                  });
+                }
                 
-                // Listen for messages from React Native
+                // Function to show emergency hospital with route
+                function showEmergencyHospital(hospitalData) {
+                  // Clear normal hospitals and ambulances
+                  hospitalMarkers.forEach(function(marker) { 
+                    if (map.hasLayer(marker)) map.removeLayer(marker); 
+                  });
+                  ambulanceMarkers.forEach(function(marker) { 
+                    if (map.hasLayer(marker)) map.removeLayer(marker); 
+                  });
+                  
+                  // Clear existing emergency marker and route
+                  if (emergencyHospitalMarker && map.hasLayer(emergencyHospitalMarker)) {
+                    map.removeLayer(emergencyHospitalMarker);
+                  }
+                  if (routeLine && map.hasLayer(routeLine)) {
+                    map.removeLayer(routeLine);
+                  }
+                  
+                  // Find hospital coordinates (use API data or fallback to first hospital)
+                  var hospitalLat = hospitalData.lat || nearbyHospitals[0].lat;
+                  var hospitalLng = hospitalData.lng || nearbyHospitals[0].lng;
+                  
+                  // Add emergency hospital marker with enhanced visibility
+                  emergencyHospitalMarker = L.marker([hospitalLat, hospitalLng], {
+                    icon: L.divIcon({
+                      html: '<div style="background: #FF0000; border: 3px solid white; border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(255,0,0,0.5); animation: pulse 2s infinite;">🏥</div><style>@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }</style>',
+                      iconSize: [45, 45],
+                      className: 'emergency-hospital-marker'
+                    })
+                  }).addTo(map).bindPopup('🚨 EMERGENCY: ' + hospitalData.name + '<br>ETA: ' + hospitalData.eta);
+                  
+                  // Create 3D arc route
+                  var userLat = ${userLocation.latitude};
+                  var userLng = ${userLocation.longitude};
+                  var distance = Math.sqrt(Math.pow(hospitalLat - userLat, 2) + Math.pow(hospitalLng - userLng, 2));
+                  var arcHeight = distance * 0.3;
+                  
+                  var arcPoints = [];
+                  for (var i = 0; i <= 30; i++) {
+                    var t = i / 30;
+                    var lat = userLat + (hospitalLat - userLat) * t;
+                    var lng = userLng + (hospitalLng - userLng) * t;
+                    var height = Math.sin(t * Math.PI) * arcHeight;
+                    arcPoints.push([lat + height, lng]);
+                  }
+                  
+                  routeLine = L.polyline(arcPoints, {
+                    color: '#333333',
+                    weight: 3,
+                    opacity: 0.8
+                  }).addTo(map);
+                }
+                
+                // Initialize based on mode
+                if ('${mapMode}' === 'normal') {
+                  showNormalHospitals();
+                  // Auto-fit all markers on initial load
+                  setTimeout(function() {
+                    var allMarkers = [userMarker].concat(hospitalMarkers).concat(ambulanceMarkers);
+                    if (allMarkers.length > 1) {
+                      var group = new L.featureGroup(allMarkers);
+                      map.fitBounds(group.getBounds().pad(0.1));
+                    }
+                  }, 500);
+                } else if ('${mapMode}' === 'emergency' && ${selectedHospital ? 'true' : 'false'}) {
+                  showEmergencyHospital(${selectedHospital ? JSON.stringify(selectedHospital) : 'null'});
+                }
+                
+                // Message handlers
+                function handleMessage(data) {
+                  if (data === 'centerOnUser') {
+                    if ('${mapMode}' === 'emergency' && emergencyHospitalMarker) {
+                      // Emergency mode: fit user and hospital
+                      var group = new L.featureGroup([userMarker, emergencyHospitalMarker]);
+                      map.fitBounds(group.getBounds().pad(0.1));
+                    } else {
+                      // Normal mode: fit user, hospitals and ambulances
+                      var allMarkers = [userMarker].concat(hospitalMarkers).concat(ambulanceMarkers);
+                      var group = new L.featureGroup(allMarkers);
+                      map.fitBounds(group.getBounds().pad(0.1));
+                    }
+                  } else {
+                    try {
+                      var parsed = JSON.parse(data);
+                      if (parsed.type === 'showEmergencyHospital') {
+                        showEmergencyHospital(parsed.hospital);
+                      } else if (parsed.type === 'showNormalHospitals') {
+                        showNormalHospitals();
+                      }
+                    } catch (e) {}
+                  }
+                }
+                
                 document.addEventListener('message', function(event) {
-                  if (event.data === 'centerOnUser') {
-                    if (${isEmergencyMode} && emergencyHospitalMarker) {
-                      // In emergency mode, fit both user and hospital
-                      var group = new L.featureGroup([userMarker, emergencyHospitalMarker]);
-                      map.fitBounds(group.getBounds().pad(0.1));
-                    } else {
-                      // Normal mode, zoom to show nearby hospitals and ambulances
-                      var allMarkers = [userMarker].concat(hospitalMarkers).concat(ambulanceMarkers);
-                      var group = new L.featureGroup(allMarkers);
-                      map.fitBounds(group.getBounds().pad(0.1));
-                    }
-                  } else {
-                    try {
-                      var data = JSON.parse(event.data);
-                      if (data.type === 'markEmergencyHospital') {
-                        // Hide all regular markers
-                        hospitalMarkers.forEach(function(marker) { map.removeLayer(marker); });
-                        ambulanceMarkers.forEach(function(marker) { map.removeLayer(marker); });
-                        
-                        if (emergencyHospitalMarker) {
-                          map.removeLayer(emergencyHospitalMarker);
-                        }
-                        
-                        // Show only the assigned hospital
-                        emergencyHospitalMarker = L.marker([${(userLocation.latitude || 28.6139) + 0.01}, ${(userLocation.longitude || 77.2090) + 0.01}], {
-                          icon: L.divIcon({
-                            html: '🏥',
-                            iconSize: [30, 30],
-                            className: 'emergency-hospital-marker'
-                          })
-                        }).addTo(map).bindPopup('EMERGENCY: ' + data.hospital.name + '<br>ETA: ' + data.hospital.eta);
-                      } else if (data.type === 'showRoute') {
-                        var hospitalLat = ${(userLocation.latitude || 28.6139) + 0.01};
-                        var hospitalLng = ${(userLocation.longitude || 77.2090) + 0.01};
-                        
-                        if (routeLine) {
-                          map.removeLayer(routeLine);
-                        }
-                        
-                        // Create smooth 3D arc route
-                        var userLat = data.userLocation.latitude;
-                        var userLng = data.userLocation.longitude;
-                        var distance = Math.sqrt(Math.pow(hospitalLat - userLat, 2) + Math.pow(hospitalLng - userLng, 2));
-                        var arcHeight = distance * 0.3;
-                        
-                        var arcPoints = [];
-                        for (var i = 0; i <= 30; i++) {
-                          var t = i / 30;
-                          var lat = userLat + (hospitalLat - userLat) * t;
-                          var lng = userLng + (hospitalLng - userLng) * t;
-                          var height = Math.sin(t * Math.PI) * arcHeight;
-                          arcPoints.push([lat + height, lng]);
-                        }
-                        
-                        routeLine = L.polyline(arcPoints, {
-                          color: '#333333',
-                          weight: 3,
-                          opacity: 0.8
-                        }).addTo(map);
-                        
-                        map.fitBounds(routeLine.getBounds(), {padding: [20, 20]});
-                      }
-                    } catch (e) {}
-                  }
+                  handleMessage(event.data);
+                });
+                window.addEventListener('message', function(event) {
+                  handleMessage(event.data);
                 });
                 
-                window.addEventListener('message', function(event) {
-                  if (event.data === 'centerOnUser') {
-                    if (${isEmergencyMode} && emergencyHospitalMarker) {
-                      // In emergency mode, fit both user and hospital
-                      var group = new L.featureGroup([userMarker, emergencyHospitalMarker]);
-                      map.fitBounds(group.getBounds().pad(0.1));
-                    } else {
-                      // Normal mode, zoom to show nearby hospitals and ambulances
-                      var allMarkers = [userMarker].concat(hospitalMarkers).concat(ambulanceMarkers);
-                      var group = new L.featureGroup(allMarkers);
-                      map.fitBounds(group.getBounds().pad(0.1));
-                    }
-                  } else {
-                    try {
-                      var data = JSON.parse(event.data);
-                      if (data.type === 'markEmergencyHospital') {
-                        // Hide all regular markers
-                        hospitalMarkers.forEach(function(marker) { map.removeLayer(marker); });
-                        ambulanceMarkers.forEach(function(marker) { map.removeLayer(marker); });
-                        
-                        if (emergencyHospitalMarker) {
-                          map.removeLayer(emergencyHospitalMarker);
-                        }
-                        
-                        // Show only the assigned hospital
-                        emergencyHospitalMarker = L.marker([${(userLocation.latitude || 28.6139) + 0.01}, ${(userLocation.longitude || 77.2090) + 0.01}], {
-                          icon: L.divIcon({
-                            html: '🏥',
-                            iconSize: [30, 30],
-                            className: 'emergency-hospital-marker'
-                          })
-                        }).addTo(map).bindPopup('EMERGENCY: ' + data.hospital.name + '<br>ETA: ' + data.hospital.eta);
-                      } else if (data.type === 'showRoute') {
-                        var hospitalLat = ${(userLocation.latitude || 28.6139) + 0.01};
-                        var hospitalLng = ${(userLocation.longitude || 77.2090) + 0.01};
-                        
-                        if (routeLine) {
-                          map.removeLayer(routeLine);
-                        }
-                        
-                        // Create smooth 3D arc route
-                        var userLat = data.userLocation.latitude;
-                        var userLng = data.userLocation.longitude;
-                        var distance = Math.sqrt(Math.pow(hospitalLat - userLat, 2) + Math.pow(hospitalLng - userLng, 2));
-                        var arcHeight = distance * 0.3;
-                        
-                        var arcPoints = [];
-                        for (var i = 0; i <= 30; i++) {
-                          var t = i / 30;
-                          var lat = userLat + (hospitalLat - userLat) * t;
-                          var lng = userLng + (hospitalLng - userLng) * t;
-                          var height = Math.sin(t * Math.PI) * arcHeight;
-                          arcPoints.push([lat + height, lng]);
-                        }
-                        
-                        routeLine = L.polyline(arcPoints, {
-                          color: '#333333',
-                          weight: 3,
-                          opacity: 0.8
-                        }).addTo(map);
-                        
-                        map.fitBounds(routeLine.getBounds(), {padding: [20, 20]});
-                      }
-                    } catch (e) {}
-                  }
-                });
+                // Also handle direct postMessage calls
+                window.ReactNativeWebView = {
+                  postMessage: handleMessage
+                };
               </script>
             </body>
             </html>
