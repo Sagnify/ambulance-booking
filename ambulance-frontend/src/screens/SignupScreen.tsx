@@ -65,6 +65,12 @@ export default function SignupScreen() {
         phone_number: phone,
         otp
       });
+      
+      // Store user data from signup response
+      const { user_id, token } = response.data;
+      setUserId(user_id.toString());
+      setUserToken(token);
+      
       nextStep();
     } catch (error: any) {
       console.log('Verify error:', error.response?.data || error.message);
@@ -83,18 +89,26 @@ export default function SignupScreen() {
     setLoading(false);
   };
 
-  const { setUserLoggedIn } = useAuth();
+  const { setUserLoggedIn, setUserData } = useAuth();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userToken, setUserToken] = useState<string | null>(null);
 
   const updateProfile = async () => {
     setLoading(true);
     try {
       const response = await API.put('/api/auth/profile', {
-        user_id: 1,
         name,
         address
+      }, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`
+        }
       });
-      // Set user as logged in and navigate to home
-      setUserLoggedIn(true);
+      
+      // Store user data and set as logged in
+      if (userId && userToken) {
+        await setUserData(userId, userToken);
+      }
     } catch (error: any) {
       const message = error.response?.data?.error || 'Failed to update profile';
       Alert.alert('Error', message);

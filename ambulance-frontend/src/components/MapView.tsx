@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { useTheme } from '../../context/ThemeContext';
 
 interface MapViewProps {
   webViewRef: React.RefObject<any>;
@@ -12,6 +13,7 @@ interface MapViewProps {
 }
 
 const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, mapMode, selectedHospital = null, hospitalData = [], ambulanceData = [] }) => {
+  const { isDarkMode } = useTheme();
   return (
     <View style={styles.mapContainer}>
       <WebView
@@ -34,8 +36,8 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, ma
             <body>
               <div id="map"></div>
               <script>
-                var map = L.map('map').setView([${userLocation.latitude}, ${userLocation.longitude}], 15);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                var map = L.map('map', { zoomControl: false }).setView([${userLocation.latitude}, ${userLocation.longitude}], 15);
+                L.tileLayer(${isDarkMode ? "'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'" : "'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'"}).addTo(map);
                 
                 // Fixed radius for nearby hospitals (in degrees, ~5km radius)
                 var searchRadius = 0.045;
@@ -160,17 +162,70 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, ma
                     weight: 3,
                     opacity: 0.8
                   }).addTo(map);
+                  
+                  // Auto-fit to show both user and hospital
+                  setTimeout(function() {
+                    var group = new L.featureGroup([userMarker, emergencyHospitalMarker]);
+                    var bounds = group.getBounds().pad(0.8);
+                    map.fitBounds(bounds);
+                  }, 100);
+                }
+                
+                // Function to show filtered hospitals
+                function showFilteredHospitals(filteredHospitals) {
+                  // Clear existing markers
+                  hospitalMarkers.forEach(function(marker) { 
+                    if (map.hasLayer(marker)) map.removeLayer(marker); 
+                  });
+                  hospitalMarkers = [];
+                  
+                  // Add filtered hospital markers
+                  filteredHospitals.forEach(function(hospital) {
+                    var marker = L.marker([hospital.latitude, hospital.longitude], {
+                      icon: L.divIcon({
+                        html: '<div style="background: white; border: 2px solid #007AFF; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">🏥</div>',
+                        iconSize: [35, 35],
+                        className: 'hospital-marker'
+                      })
+                    }).bindPopup(hospital.name + '<br>' + hospital.distance + ' km away<br>Type: ' + hospital.type);
+                    
+                    hospitalMarkers.push(marker);
+                    marker.addTo(map);
+                  });
+                  
+                  // Auto-fit filtered hospitals
+                  if (hospitalMarkers.length > 0) {
+                    setTimeout(function() {
+                      var allMarkers = [userMarker].concat(hospitalMarkers);
+                      var group = new L.featureGroup(allMarkers);
+                      var bounds = group.getBounds().pad(0.5);
+                      map.fitBounds(bounds);
+                    }, 100);
+                  }
+                }
+                
+                // Function to center on specific hospital
+                function centerOnHospital(hospital) {
+                  map.setView([hospital.latitude, hospital.longitude], 15);
+                  
+                  // Highlight the selected hospital
+                  hospitalMarkers.forEach(function(marker) {
+                    if (marker.getLatLng().lat === hospital.latitude && marker.getLatLng().lng === hospital.longitude) {
+                      marker.openPopup();
+                    }
+                  });
                 }
                 
                 // Initialize based on mode
                 if ('${mapMode}' === 'normal') {
                   showNormalHospitals();
-                  // Auto-fit all markers on initial load
+                  // Auto-fit all markers on initial load in upper half
                   setTimeout(function() {
                     var allMarkers = [userMarker].concat(hospitalMarkers).concat(ambulanceMarkers);
                     if (allMarkers.length > 1) {
                       var group = new L.featureGroup(allMarkers);
-                      map.fitBounds(group.getBounds().pad(0.1));
+                      var bounds = group.getBounds().pad(0.8);
+                      map.fitBounds(bounds);
                     }
                   }, 500);
                 } else if ('${mapMode}' === 'emergency' && ${selectedHospital ? 'true' : 'false'}) {
@@ -181,14 +236,18 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, ma
                 function handleMessage(data) {
                   if (data === 'centerOnUser') {
                     if ('${mapMode}' === 'emergency' && emergencyHospitalMarker) {
-                      // Emergency mode: fit user and hospital
+                      // Emergency mode: fit user and hospital in upper half
                       var group = new L.featureGroup([userMarker, emergencyHospitalMarker]);
-                      map.fitBounds(group.getBounds().pad(0.1));
+                      var bounds = group.getBounds().pad(0.5);
+                      map.fitBounds(bounds);
                     } else {
-                      // Normal mode: fit user, hospitals and ambulances
+                      // Normal mode: fit markers in upper half of visible area
                       var allMarkers = [userMarker].concat(hospitalMarkers).concat(ambulanceMarkers);
-                      var group = new L.featureGroup(allMarkers);
-                      map.fitBounds(group.getBounds().pad(0.1));
+                      if (allMarkers.length > 0) {
+                        var group = new L.featureGroup(allMarkers);
+                        var bounds = group.getBounds().pad(0.7);
+                        map.fitBounds(bounds);
+                      }
                     }
                   } else {
                     try {
@@ -197,6 +256,10 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, ma
                         showEmergencyHospital(parsed.hospital);
                       } else if (parsed.type === 'showNormalHospitals') {
                         showNormalHospitals();
+                      } else if (parsed.type === 'showFilteredHospitals') {
+                        showFilteredHospitals(parsed.hospitals);
+                      } else if (parsed.type === 'centerOnHospital') {
+                        centerOnHospital(parsed.hospital);
                       }
                     } catch (e) {}
                   }
@@ -228,6 +291,7 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, ma
 const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
+    paddingBottom: 350,
   },
   map: {
     flex: 1,

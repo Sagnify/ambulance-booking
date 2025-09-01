@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface EmergencyModalProps {
   visible: boolean;
@@ -8,18 +9,19 @@ interface EmergencyModalProps {
 }
 
 const EmergencyModal: React.FC<EmergencyModalProps> = ({ visible, onCancel, onConfirm }) => {
+  const { colors } = useTheme();
   if (!visible) return null;
 
   return (
     <View style={styles.modalOverlay}>
-      <View style={styles.emergencyModal}>
+      <View style={[styles.emergencyModal, { backgroundColor: colors.background }]}>
         <Text style={styles.modalTitle}>🚨 Emergency Alert</Text>
-        <Text style={styles.modalText}>Are you sure this is a medical emergency?</Text>
-        <Text style={styles.warningText}>False emergency calls may result in penalties</Text>
+        <Text style={[styles.modalText, { color: colors.text }]}>Are you sure this is a medical emergency?</Text>
+        <Text style={[styles.warningText, { color: colors.textSecondary }]}>False emergency calls may result in penalties</Text>
         
         <View style={styles.modalButtons}>
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+          <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surface }]} onPress={onCancel}>
+            <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.confirmButton} onPress={onConfirm}>
             <Text style={styles.confirmButtonText}>YES, EMERGENCY</Text>

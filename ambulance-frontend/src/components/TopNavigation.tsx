@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface TopNavigationProps {
   userName: string;
@@ -16,18 +17,15 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
   onProfilePress, 
   onLogout 
 }) => {
+  const { isDarkMode, toggleTheme, colors } = useTheme();
   return (
     <>
       <View style={styles.topContainer}>
-        <TouchableOpacity style={styles.menuButton}>
-          <Text style={styles.menuIcon}>☰</Text>
-        </TouchableOpacity>
-
-        <View style={styles.addressBar}>
-          <Text style={styles.greetingText} numberOfLines={1}>
+        <View style={[styles.addressBar, { backgroundColor: colors.background }]}>
+          <Text style={[styles.greetingText, { color: colors.textSecondary }]} numberOfLines={1}>
             Hi {userName}!
           </Text>
-          <Text style={styles.addressText} numberOfLines={1}>
+          <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={1}>
             {address}
           </Text>
         </View>
@@ -38,17 +36,22 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
       </View>
 
       {profileMenuVisible && (
-        <View style={styles.profileMenu}>
+        <View style={[styles.profileMenu, { backgroundColor: colors.background }]}>
           <TouchableOpacity style={styles.menuItem} onPress={() => console.log('Profile')}>
-            <Text style={styles.menuText}>Profile</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => console.log('Medical History')}>
-            <Text style={styles.menuText}>Medical History</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Medical History</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => console.log('Emergency Contacts')}>
-            <Text style={styles.menuText}>Emergency Contacts</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Emergency Contacts</Text>
           </TouchableOpacity>
-          <View style={styles.menuDivider} />
+          <TouchableOpacity style={styles.menuItem} onPress={toggleTheme}>
+            <Text style={[styles.menuText, { color: colors.text }]}>
+              {isDarkMode ? '☀️' : '🌙'} {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+            </Text>
+          </TouchableOpacity>
+          <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
           <TouchableOpacity style={styles.menuItem} onPress={onLogout}>
             <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
           </TouchableOpacity>
@@ -67,24 +70,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 10,
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  menuIcon: {
-    fontSize: 18,
-    color: '#000',
   },
   addressBar: {
     flex: 1,

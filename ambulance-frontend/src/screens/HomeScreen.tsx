@@ -19,26 +19,32 @@ import TopNavigation from '../components/TopNavigation';
 import MapViewComponent from '../components/MapView';
 import ServiceCard from '../components/ServiceCard';
 import EmergencyModal from '../components/EmergencyModal';
+import SlideToBook from '../components/SlideToBook';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import API from '../../services/api';
+import { useNavigation } from '@react-navigation/native';
 
 
 const { width, height } = Dimensions.get('window');
 
 const HomeScreen = () => {
-  const { logout } = useAuth();
+  const { logout, userId, userToken } = useAuth();
+  const { isDarkMode, colors } = useTheme();
+  const navigation = useNavigation();
   const [address, setAddress] = useState('Fetching location...');
   const [userLocation, setUserLocation] = useState({ 
     latitude: 22.4675, 
     longitude: 88.3732 
   });
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
-  const [selectedService, setSelectedService] = useState<'emergency' | 'accident' | 'hospital' | null>(null);
+  const [selectedService, setSelectedService] = useState<'emergency' | 'accident' | null>(null);
   // Removed unused sheetRef for BottomSheet
-  const panelHeight = useRef(new Animated.Value(height * 0.4)).current;
-  const [panelPosition, setPanelPosition] = useState(height * 0.4);
-  const [showHospitalSearch, setShowHospitalSearch] = useState(false);
+  const panelHeight = useRef(new Animated.Value(height * 0.5)).current;
+  const [panelPosition, setPanelPosition] = useState(height * 0.5);
+
   const [hospitalSearch, setHospitalSearch] = useState('');
+  const [filteredHospitals, setFilteredHospitals] = useState<any[]>([]);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [userName, setUserName] = useState('User');
   const [cachedLocation, setCachedLocation] = useState<{latitude: number, longitude: number, timestamp: number} | null>(null);
@@ -54,12 +60,16 @@ const HomeScreen = () => {
   const [showConditionDropdown, setShowConditionDropdown] = useState(false);
   const [showHospitalSelection, setShowHospitalSelection] = useState(false);
   const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
-  const [selectedHospital, setSelectedHospital] = useState<{name: string, distance: string, eta: string} | null>(null);
+  const [selectedHospital, setSelectedHospital] = useState<{name: string, distance: string, eta: string, lat: number, lng: number} | null>(null);
   const [ambulanceETA, setAmbulanceETA] = useState('8-12 min');
   const [hospitalData, setHospitalData] = useState<any[]>([]);
   const [ambulanceData, setAmbulanceData] = useState<any[]>([]);
   const [searchRadius, setSearchRadius] = useState(5);
   const [showRadiusControl, setShowRadiusControl] = useState(false);
+  const [selectedHospitalForBooking, setSelectedHospitalForBooking] = useState<any>(null);
+  const [showBookingConfirmation, setShowBookingConfirmation] = useState(false);
+  const [bookingHospitalData, setBookingHospitalData] = useState<any>(null);
+
 
   // Get user location and nearby services
   useEffect(() => {
@@ -113,8 +123,10 @@ const HomeScreen = () => {
       // Set hospital data if API succeeds
       if (hospitalsResponse.status === 'fulfilled' && hospitalsResponse.value.data.hospitals) {
         setHospitalData(hospitalsResponse.value.data.hospitals);
+        setFilteredHospitals(hospitalsResponse.value.data.hospitals);
       } else {
         setHospitalData([]);
+        setFilteredHospitals([]);
       }
       
       // Set ambulance data if API succeeds
@@ -126,6 +138,7 @@ const HomeScreen = () => {
     } catch (error) {
       console.log('API not available, no hospitals to show');
       setHospitalData([]);
+      setFilteredHospitals([]);
       setAmbulanceData([]);
     }
   };
@@ -134,81 +147,151 @@ const HomeScreen = () => {
     setSearchRadius(newRadius);
     await fetchNearbyServices(userLocation.latitude, userLocation.longitude, newRadius);
   };
+  
+  // Handle hospital search and map coordination
+  const handleHospitalSearch = (searchText: string) => {
+    setHospitalSearch(searchText);
+    
+    if (searchText.trim() === '') {
+      setFilteredHospitals(hospitalData);
+      // Show all hospitals on map
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(JSON.stringify({ type: 'showNormalHospitals' }));
+      }
+    } else {
+      const filtered = hospitalData.filter(hospital => 
+        hospital.name.toLowerCase().includes(searchText.toLowerCase())
+      );
+      setFilteredHospitals(filtered);
+      
+      // Update map to show only filtered hospitals
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(JSON.stringify({ 
+          type: 'showFilteredHospitals', 
+          hospitals: filtered 
+        }));
+      }
+    }
+  };
+  
+  // Handle hospital selection from list
+  const handleHospitalSelect = (hospital: any) => {
+    // Center map on selected hospital
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({ 
+        type: 'centerOnHospital', 
+        hospital: hospital 
+      }));
+    }
+    // Show slide to book for selected hospital (no panel adjustment)
+    setSelectedHospitalForBooking(hospital);
+  };
+  
+  // Handle slide to book completion
+  const handleSlideToBookComplete = () => {
+    setBookingHospitalData(selectedHospitalForBooking); // Store hospital data
+    setSelectedHospitalForBooking(null); // Hide slider
+    setShowBookingConfirmation(true);
+    
+    setPanelPosition(height * 0.45);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.45,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+  };
+  
+  // Handle booking cancellation
+  const handleBookingCancel = () => {
+    setShowBookingConfirmation(false);
+    setBookingHospitalData(null);
+    setSelectedHospitalForBooking(null);
+    
+    setPanelPosition(height * 0.5);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.5,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+  };
 
   // Get user data
   useEffect(() => {
     const getUserData = async () => {
+      if (!userId || !userToken) {
+        console.log('No user ID or token available');
+        return;
+      }
+      
       try {
-        const response = await API.get('/api/auth/users');
-        if (response.data.users && response.data.users.length > 0) {
-          const user = response.data.users[response.data.users.length - 1]; // Get latest user
-          setUserName(user.name || 'User');
+        const response = await API.get(`/api/auth/users/${userId}`, {
+          headers: {
+            Authorization: `Bearer ${userToken}`
+          }
+        });
+        if (response.data.user) {
+          setUserName(response.data.user.name || 'User');
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
+        // Fallback to generic name if API fails
+        setUserName('User');
       }
     };
     getUserData();
-  }, []);
+  }, [userId, userToken]);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
       setKeyboardHeight(e.endCoordinates.height);
-      if (showHospitalSearch) {
-        const newHeight = height - e.endCoordinates.height+ 180;
-        setPanelPosition(newHeight);
-        Animated.spring(panelHeight, {
-          toValue: newHeight,
-          useNativeDriver: false,
-          tension: 80,
-          friction: 10,
-        }).start();
-      }
+      // Raise panel when keyboard is shown
+      const newHeight = height - e.endCoordinates.height + 50;
+      setPanelPosition(newHeight);
+      Animated.spring(panelHeight, {
+        toValue: newHeight,
+        useNativeDriver: false,
+        tension: 80,
+        friction: 10,
+      }).start();
     });
 
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardHeight(0);
-      if (showHospitalSearch) {
-        const newHeight = height * 0.8;
-        setPanelPosition(newHeight);
-        Animated.spring(panelHeight, {
-          toValue: newHeight,
-          useNativeDriver: false,
-          tension: 80,
-          friction: 10,
-        }).start();
-      }
+      // Return to normal panel height when keyboard is hidden
+      const newHeight = height * 0.5;
+      setPanelPosition(newHeight);
+      Animated.spring(panelHeight, {
+        toValue: newHeight,
+        useNativeDriver: false,
+        tension: 80,
+        friction: 10,
+      }).start();
     });
 
     return () => {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
-  }, [showHospitalSearch]);
+  }, []);
 
-  const handleServiceSelect = (service: 'emergency' | 'accident' | 'hospital') => {
+  const handleServiceSelect = (service: 'emergency' | 'accident') => {
     setSelectedService(service);
-    if (service === 'hospital') {
-      setShowHospitalSearch(true);
-      setPanelPosition(height * 0.8);
-      Animated.spring(panelHeight, {
-        toValue: height * 0.8,
-        useNativeDriver: false,
-        tension: 100,
-        friction: 8,
-      }).start();
-    } else if (service === 'emergency') {
+    if (service === 'emergency') {
       setShowEmergencyModal(true);
     }
     console.log('Selected service:', service);
   };
 
   const handleEmergencyConfirm = () => {
+    // Dismiss keyboard to prevent blinking
+    Keyboard.dismiss();
     setShowEmergencyModal(false);
     setShowEmergencyForm(true);
-    setPanelPosition(height * 0.85);
+    setPanelPosition(height * 0.6);
     Animated.spring(panelHeight, {
-      toValue: height * 0.85,
+      toValue: height * 0.6,
       useNativeDriver: false,
       tension: 100,
       friction: 8,
@@ -220,23 +303,44 @@ const HomeScreen = () => {
     setShowHospitalSelection(true);
     
     // Pan down to show more map during hospital selection
-    setPanelPosition(height * 0.3);
+    setPanelPosition(height * 0.5);
     Animated.spring(panelHeight, {
-      toValue: height * 0.3,
+      toValue: height * 0.5,
       useNativeDriver: false,
       tension: 100,
       friction: 8,
     }).start();
     
-    // Simulate finding nearest hospital - ready for API integration
+    // Find nearest hospital from API data
     setTimeout(() => {
-      const nearestHospital = { 
-        name: 'City General Hospital', 
-        distance: '2.3 km', 
-        eta: '8-12 min',
-        lat: userLocation.latitude + 0.01,
-        lng: userLocation.longitude + 0.01
-      };
+      let nearestHospital;
+      
+      if (hospitalData.length > 0) {
+        // Use nearest hospital from API (already sorted by distance)
+        const apiHospital = hospitalData[0];
+        // Calculate ETA based on distance (assuming 30 km/h average speed in city)
+        const distanceKm = parseFloat(apiHospital.distance);
+        const etaMinutes = Math.round((distanceKm / 30) * 60) + 3; // +3 min for dispatch
+        const etaRange = `${etaMinutes}-${etaMinutes + 4}`;
+        
+        nearestHospital = {
+          name: apiHospital.name,
+          distance: apiHospital.distance,
+          eta: etaRange + ' min',
+          lat: apiHospital.latitude,
+          lng: apiHospital.longitude
+        };
+      } else {
+        // Fallback if no API data
+        nearestHospital = {
+          name: 'Emergency Services',
+          distance: 'Unknown',
+          eta: '10-15 min',
+          lat: userLocation.latitude + 0.01,
+          lng: userLocation.longitude + 0.01
+        };
+      }
+      
       setSelectedHospital(nearestHospital);
       if (webViewRef.current) {
         webViewRef.current.postMessage(JSON.stringify({
@@ -247,10 +351,10 @@ const HomeScreen = () => {
       setShowHospitalSelection(false);
       setShowFinalConfirmation(true);
       
-      // Pan up to show confirmation details
-      setPanelPosition(height * 0.7);
+      // Pan down to show map with selected hospital
+      setPanelPosition(height * 0.38);
       Animated.spring(panelHeight, {
-        toValue: height * 0.7,
+        toValue: height * 0.38,
         useNativeDriver: false,
         tension: 100,
         friction: 8,
@@ -286,22 +390,22 @@ const HomeScreen = () => {
     setSelectedHospital(null);
     setEmergencyData({ condition: '', severity: '', instructions: '' });
     
-    // Revert map to normal mode
-    if (webViewRef.current) {
-      webViewRef.current.postMessage(JSON.stringify({ type: 'showNormalHospitals' }));
-    }
-  };
-
-  const handleBackToMenu = () => {
-    setShowHospitalSearch(false);
-    setSelectedService(null);
-    setHospitalSearch('');
+    // Return to initial panel height
+    setPanelPosition(height * 0.5);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.5,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
     
     // Revert map to normal mode
     if (webViewRef.current) {
       webViewRef.current.postMessage(JSON.stringify({ type: 'showNormalHospitals' }));
     }
   };
+
+
 
   const handleLogout = () => {
     setProfileMenuVisible(false);
@@ -317,8 +421,8 @@ const HomeScreen = () => {
 
   const onPanGestureEvent = (event: any) => {
     const { translationY } = event.nativeEvent;
-    const maxHeight = showHospitalSearch ? height * 0.9 : height * 0.8;
-    const newHeight = Math.max(height * 0.4, Math.min(maxHeight, panelPosition - translationY));
+    const maxHeight = height * 0.8;
+    const newHeight = Math.max(height * 0.5, Math.min(maxHeight, panelPosition - translationY));
     panelHeight.setValue(newHeight);
   };
 
@@ -328,10 +432,11 @@ const HomeScreen = () => {
       const currentHeight = panelPosition - translationY;
       
       let targetHeight;
-      if (showHospitalSearch) {
-        targetHeight = currentHeight > height * 0.7 ? (keyboardHeight > 0 ? height * 0.9 : height * 0.8) : height * 0.4;
+      if (keyboardHeight > 0) {
+        // When keyboard is active, maintain raised position
+        targetHeight = height - keyboardHeight + 50;
       } else {
-        targetHeight = currentHeight > height * 0.6 ? height * 0.8 : height * 0.4;
+        targetHeight = currentHeight > height * 0.6 ? height * 0.8 : height * 0.5;
       }
       
       setPanelPosition(targetHeight);
@@ -349,7 +454,7 @@ const HomeScreen = () => {
       onGestureEvent={onPanGestureEvent}
       onHandlerStateChange={onPanHandlerStateChange}
     >
-      <Animated.View style={[styles.bottomPanel, { height: panelHeight }]}>
+      <Animated.View style={[styles.bottomPanel, { height: panelHeight, backgroundColor: colors.background }]}>
       <View style={styles.handle} />
       
       <ScrollView style={styles.panelContent} showsVerticalScrollIndicator={false}>
@@ -394,8 +499,15 @@ const HomeScreen = () => {
               <TouchableOpacity style={styles.backToFormButton} onPress={() => {
                 setShowFinalConfirmation(false);
                 setShowEmergencyForm(true);
+                setPanelPosition(height * 0.6);
+                Animated.spring(panelHeight, {
+                  toValue: height * 0.6,
+                  useNativeDriver: false,
+                  tension: 100,
+                  friction: 8,
+                }).start();
               }}>
-                <Text style={styles.backToFormText}>Back</Text>
+                <Text style={styles.backToFormText}>‹ Back</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.finalConfirmButton} onPress={handleFinalConfirm}>
                 <Text style={styles.finalConfirmText}>🚨 BOOK AMBULANCE</Text>
@@ -405,8 +517,10 @@ const HomeScreen = () => {
         ) : showEmergencyForm ? (
           <View>
             <View style={styles.emergencyHeader}>
-              <TouchableOpacity onPress={handleEmergencyCancel} style={styles.backButton}>
-                <Text style={styles.backIcon}>←</Text>
+              <TouchableOpacity onPress={() => {
+                handleEmergencyCancel();
+              }} style={styles.backButton}>
+                <Text style={styles.backIcon}>‹</Text>
               </TouchableOpacity>
               <Text style={styles.emergencyTitle}>Emergency Details</Text>
             </View>
@@ -472,7 +586,7 @@ const HomeScreen = () => {
                           setShowConditionDropdown(false);
                           
                           // Normalize panel when option is selected
-                          const targetHeight = height * 0.85;
+                          const targetHeight = height * 0.6;
                           setPanelPosition(targetHeight);
                           Animated.spring(panelHeight, {
                             toValue: targetHeight,
@@ -502,7 +616,9 @@ const HomeScreen = () => {
           <View>
             <View style={styles.dashboardHeader}>
               <Text style={styles.dashboardTitle}>🚨 Emergency Active</Text>
-              <TouchableOpacity onPress={handleEmergencyCancel}>
+              <TouchableOpacity onPress={() => {
+                handleEmergencyCancel();
+              }}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -537,90 +653,128 @@ const HomeScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        ) : showHospitalSearch ? (
-          <View>
-            <View style={styles.searchHeader}>
-              <TouchableOpacity onPress={handleBackToMenu} style={styles.backButton}>
-                <Text style={styles.backIcon}>←</Text>
+
+        ) : showBookingConfirmation ? (
+          <View style={styles.bookingConfirmationContainer}>
+            <View style={styles.bookingHeader}>
+              <TouchableOpacity onPress={handleBookingCancel} style={styles.backButton}>
+                <Text style={styles.backIcon}>‹</Text>
               </TouchableOpacity>
-              <Text style={styles.searchTitle}>Select Hospital</Text>
+              <Text style={styles.bookingTitle}>Book Ambulance</Text>
             </View>
             
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search hospitals..."
-                value={hospitalSearch}
-                onChangeText={setHospitalSearch}
-                autoFocus
-              />
+            <View style={styles.hospitalCard}>
+              <Text style={styles.hospitalCardName}>{bookingHospitalData?.name}</Text>
+              <Text style={styles.hospitalCardDistance}>{bookingHospitalData?.distance} km</Text>
             </View>
             
-            <View style={styles.hospitalList}>
-              {hospitalData.length > 0 ? (
-                hospitalData
-                  .filter(hospital => 
-                    hospital.name.toLowerCase().includes(hospitalSearch.toLowerCase())
-                  )
-                  .map((hospital, index) => (
-                    <TouchableOpacity key={hospital.id || index} style={styles.hospitalItem}>
-                      <Text style={styles.hospitalName}>{hospital.name}</Text>
-                      <Text style={styles.hospitalDistance}>{hospital.distance} km away</Text>
-                      <Text style={styles.hospitalType}>{hospital.type}</Text>
-                    </TouchableOpacity>
-                  ))
-              ) : (
-                <Text style={styles.noHospitalsText}>No hospitals found in {searchRadius}km radius</Text>
-              )}
+            <View style={styles.ambulanceCard}>
+              <View style={styles.ambulanceRow}>
+                <Text style={styles.ambulanceLabel}>Status</Text>
+                <Text style={styles.ambulanceValue}>Available</Text>
+              </View>
+              <View style={styles.ambulanceRow}>
+                <Text style={styles.ambulanceLabel}>ETA</Text>
+                <Text style={styles.ambulanceValue}>8-12 min</Text>
+              </View>
+              <View style={styles.ambulanceRow}>
+                <Text style={styles.ambulanceLabel}>Driver</Text>
+                <Text style={styles.ambulanceValue}>Rajesh Kumar</Text>
+              </View>
+            </View>
+            
+            <View style={styles.bookingButtonContainer}>
+              <TouchableOpacity style={styles.cancelButton} onPress={handleBookingCancel}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmButton}>
+                <Text style={styles.confirmButtonText}>Confirm Booking</Text>
+              </TouchableOpacity>
             </View>
           </View>
         ) : (
           <View>
-            <Text style={styles.panelTitle}>Book Ambulance</Text>
+            <Text style={[styles.panelTitle, { color: colors.text }]}>Find Hospitals</Text>
             
-            <ServiceCard
-              emoji="🚨"
-              name="Emergency"
-              description="Immediate medical assistance"
-              selected={selectedService === 'emergency'}
-              onPress={() => handleServiceSelect('emergency')}
-            />
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={[styles.searchInput, { backgroundColor: colors.surface, color: colors.text }]}
+                placeholder="Search hospitals nearby..."
+                placeholderTextColor={colors.textSecondary}
+                value={hospitalSearch}
+                onChangeText={handleHospitalSearch}
+              />
+              <TouchableOpacity 
+                style={[styles.radiusSelector, { backgroundColor: colors.surface }]}
+                onPress={() => setShowRadiusControl(!showRadiusControl)}
+              >
+                <Text style={[styles.radiusText, { color: colors.text }]}>{searchRadius}km</Text>
+                <Text style={[styles.radiusArrow, { color: colors.textSecondary }]}>▼</Text>
+              </TouchableOpacity>
+            </View>
             
-            <ServiceCard
-              emoji="🚑"
-              name="Accident"
-              description="Road accident & trauma care"
-              selected={selectedService === 'accident'}
-              onPress={() => handleServiceSelect('accident')}
-            />
+            {/* Radius Options */}
+            {showRadiusControl && (
+              <View style={styles.radiusOptions}>
+                {[2, 5, 10, 15, 20].map((radius) => (
+                  <TouchableOpacity
+                    key={radius}
+                    style={[styles.radiusOption, { backgroundColor: searchRadius === radius ? colors.primary : colors.surface }, searchRadius === radius && styles.selectedRadiusOption]}
+                    onPress={() => {
+                      handleRadiusChange(radius);
+                      setShowRadiusControl(false);
+                    }}
+                  >
+                    <Text style={[styles.radiusOptionText, { color: searchRadius === radius ? (isDarkMode ? colors.background : '#fff') : colors.textSecondary }, searchRadius === radius && styles.selectedRadiusOptionText]}>
+                      {radius}km
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             
-            <ServiceCard
-              emoji="🏥"
-              name="Select Hospital"
-              description="Choose specific hospital"
-              selected={selectedService === 'hospital'}
-              onPress={() => handleServiceSelect('hospital')}
-            />
-
-        {/* Show additional content when service is selected */}
-        {selectedService && (
-          <View style={styles.selectedContent}>
-            <Text style={styles.selectedTitle}>
-              {selectedService === 'emergency' && 'Emergency Services'}
-              {selectedService === 'accident' && 'Accident Response'}
-              {selectedService === 'hospital' && 'Hospital Selection'}
-            </Text>
-            <Text style={styles.selectedDesc}>
-              {selectedService === 'emergency' && 'Dispatching nearest ambulance with emergency medical team...'}
-              {selectedService === 'accident' && 'Sending trauma-equipped ambulance with specialized care...'}
-              {selectedService === 'hospital' && 'Choose your preferred hospital from the list below...'}
-            </Text>
+            {/* Emergency Services */}
+            <View style={styles.emergencyButtons}>
+              <TouchableOpacity 
+                style={[styles.emergencyBtn, { backgroundColor: colors.primary }]}
+                onPress={() => handleServiceSelect('emergency')}
+              >
+                <Text style={[styles.emergencyBtnText, { color: '#fff' }]}>🚨 Emergency</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.emergencyBtn, { backgroundColor: colors.primary }]}
+                onPress={() => handleServiceSelect('accident')}
+              >
+                <Text style={[styles.emergencyBtnText, { color: '#fff' }]}>🚑 Accident</Text>
+              </TouchableOpacity>
+            </View>
             
-            <TouchableOpacity style={styles.continueButton}>
-              <Text style={styles.continueText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+            {/* Hospital List */}
+            <ScrollView style={styles.hospitalList} showsVerticalScrollIndicator={false}>
+              {filteredHospitals.length > 0 ? (
+                filteredHospitals.map((hospital, index) => (
+                  <TouchableOpacity 
+                    key={hospital.id || index} 
+                    style={[
+                      styles.hospitalItem,
+                      { backgroundColor: colors.background, borderColor: colors.border },
+                      selectedHospitalForBooking?.id === hospital.id && { borderColor: colors.primary, backgroundColor: colors.surface }
+                    ]}
+                    onPress={() => handleHospitalSelect(hospital)}
+                  >
+                    <View style={styles.hospitalHeader}>
+                      <Text style={[styles.hospitalName, { color: colors.text }]}>{hospital.name}</Text>
+                      <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>{hospital.distance} km</Text>
+                    </View>
+                    <Text style={[styles.hospitalType, { color: '#007AFF' }]}>{hospital.type}</Text>
+                    <Text style={[styles.hospitalServices, { color: colors.textSecondary }]}>Emergency: {hospital.emergency_services ? 'Available' : 'Not Available'}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={[styles.noHospitalsText, { color: colors.textSecondary }]}>No hospitals found in {searchRadius}km radius</Text>
+              )}
+            </ScrollView>
           </View>
         )}
       </ScrollView>
@@ -630,7 +784,7 @@ const HomeScreen = () => {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
       <MapViewComponent 
@@ -642,42 +796,9 @@ const HomeScreen = () => {
         ambulanceData={ambulanceData}
       />
 
-
-
       {/* Location Snap Button */}
       <LocationSnapButton onPress={snapToCurrentLocation} />
       
-      {/* Radius Control Button */}
-      <TouchableOpacity 
-        style={styles.radiusButton}
-        onPress={() => setShowRadiusControl(!showRadiusControl)}
-      >
-        <Text style={styles.radiusButtonText}>{searchRadius}km</Text>
-      </TouchableOpacity>
-      
-      {/* Radius Control Panel */}
-      {showRadiusControl && (
-        <View style={styles.radiusPanel}>
-          <Text style={styles.radiusPanelTitle}>Search Radius</Text>
-          <View style={styles.radiusOptions}>
-            {[2, 5, 10, 15, 20].map((radius) => (
-              <TouchableOpacity
-                key={radius}
-                style={[styles.radiusOption, searchRadius === radius && styles.selectedRadius]}
-                onPress={() => {
-                  handleRadiusChange(radius);
-                  setShowRadiusControl(false);
-                }}
-              >
-                <Text style={[styles.radiusOptionText, searchRadius === radius && styles.selectedRadiusText]}>
-                  {radius}km
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-
       <TopNavigation 
         userName={userName}
         address={address}
@@ -687,6 +808,15 @@ const HomeScreen = () => {
       />
 
       {renderBottomPanel()}
+      
+      {/* Floating Slide to Book - Only on initial hospital list page */}
+      {selectedHospitalForBooking && !showBookingConfirmation && 
+       !showEmergencyForm && !showEmergencyDashboard && !showHospitalSelection && !showFinalConfirmation && (
+        <SlideToBook 
+          hospitalName={selectedHospitalForBooking.name}
+          onSlideComplete={handleSlideToBookComplete}
+        />
+      )}
       
       <EmergencyModal
         visible={showEmergencyModal}
@@ -724,8 +854,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
-    elevation: 8,
-    zIndex: 1000,
+    elevation: 10,
+    zIndex: 1001,
   },
   handle: {
     width: 40,
@@ -738,6 +868,7 @@ const styles = StyleSheet.create({
   },
   panelContent: {
     paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   panelTitle: {
     fontSize: 20,
@@ -779,12 +910,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Hospital Search Styles
-  searchHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
+  // Common Styles
   backButton: {
     width: 40,
     height: 40,
@@ -793,26 +919,69 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   backIcon: {
-    fontSize: 20,
+    fontSize: 24,
     color: '#000',
-  },
-  searchTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
+    fontWeight: 'bold',
   },
   searchContainer: {
     marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   searchInput: {
+    flex: 1,
     backgroundColor: '#f8f8f8',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
   },
+  radiusSelector: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 60,
+  },
+  radiusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+  },
+  radiusArrow: {
+    fontSize: 10,
+    color: '#666',
+  },
+  radiusOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  radiusOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f8f8f8',
+    alignItems: 'center',
+  },
+  selectedRadiusOption: {
+    backgroundColor: '#000',
+  },
+  radiusOptionText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#666',
+  },
+  selectedRadiusOptionText: {
+    color: '#fff',
+  },
   hospitalList: {
-    gap: 12,
+    flex: 1,
+    paddingVertical: 8,
   },
   hospitalItem: {
     backgroundColor: '#fff',
@@ -820,6 +989,12 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#f0f0f0',
+    marginBottom: 12,
+  },
+  selectedHospitalItem: {
+    borderColor: '#000',
+    borderWidth: 2,
+    backgroundColor: '#f8f8f8',
   },
   hospitalName: {
     fontSize: 16,
@@ -836,6 +1011,35 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     textTransform: 'capitalize',
     marginTop: 2,
+  },
+  hospitalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  hospitalServices: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+
+  emergencyButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  emergencyBtn: {
+    flex: 1,
+    backgroundColor: '#000',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  emergencyBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
   },
   noHospitalsText: {
     fontSize: 16,
@@ -1135,70 +1339,92 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   
-  // Radius Control Styles
-  radiusButton: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 80,
-    right: 20,
-    backgroundColor: '#fff',
-    borderRadius: 25,
-    width: 50,
-    height: 50,
-    justifyContent: 'center',
+  // Booking Confirmation Styles
+  bookingConfirmationContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  bookingHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    marginBottom: 24,
   },
-  radiusButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  radiusPanel: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 160 : 140,
-    right: 20,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    minWidth: 120,
-  },
-  radiusPanelTitle: {
-    fontSize: 14,
+  bookingTitle: {
+    fontSize: 18,
     fontWeight: '600',
     color: '#000',
-    marginBottom: 12,
-    textAlign: 'center',
   },
-  radiusOptions: {
-    gap: 8,
-  },
-  radiusOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  hospitalCard: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
     borderRadius: 8,
-    backgroundColor: '#f8f8f8',
+    padding: 16,
+    marginBottom: 16,
+  },
+  hospitalCardName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
+  },
+  hospitalCardDistance: {
+    fontSize: 14,
+    color: '#666',
+  },
+  ambulanceCard: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 24,
+  },
+  ambulanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  ambulanceLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  ambulanceValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#000',
+  },
+  bookingButtonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 'auto',
+  },
+  cancelButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingVertical: 16,
     alignItems: 'center',
   },
-  selectedRadius: {
-    backgroundColor: '#007AFF',
-  },
-  radiusOptionText: {
-    fontSize: 14,
+  cancelButtonText: {
+    fontSize: 16,
     fontWeight: '500',
     color: '#666',
   },
-  selectedRadiusText: {
+  confirmButton: {
+    flex: 2,
+    backgroundColor: '#000',
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#fff',
   },
+
+
+
 });
 
 export default HomeScreen;

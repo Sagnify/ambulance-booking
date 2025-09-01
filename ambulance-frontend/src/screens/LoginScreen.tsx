@@ -25,7 +25,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
-  const { setUserLoggedIn } = useAuth();
+  const { setUserLoggedIn, setUserData } = useAuth();
   const [step, setStep] = useState(1); // Step 1: Phone, Step 2: OTP
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
@@ -126,7 +126,8 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('API Response:', response.data);
 
       if (response.status === 200) {
-        setUserLoggedIn(true);
+        const { user_id, token } = response.data;
+        await setUserData(user_id.toString(), token);
         console.log("Login successful, redirecting to home page...");
       }
     } catch (error: any) {

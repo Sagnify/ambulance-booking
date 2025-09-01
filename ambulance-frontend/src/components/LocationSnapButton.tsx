@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, View, StyleSheet, Dimensions } from 'react-native';
+import { TouchableOpacity, View, StyleSheet, Dimensions, Text } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 const { height } = Dimensions.get('window');
 
@@ -8,14 +9,19 @@ interface LocationSnapButtonProps {
 }
 
 const LocationSnapButton: React.FC<LocationSnapButtonProps> = ({ onPress }) => {
+  const { colors } = useTheme();
   return (
     <TouchableOpacity 
-      style={styles.locationButton}
+      style={[styles.locationButton, { backgroundColor: colors.background }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
       <View style={styles.locationIconContainer}>
-        <View style={styles.locationDot} />
+        <View style={styles.crosshair}>
+          <View style={[styles.crosshairHorizontal, { backgroundColor: colors.text }]} />
+          <View style={[styles.crosshairVertical, { backgroundColor: colors.text }]} />
+          <View style={[styles.crosshairCenter, { backgroundColor: colors.text }]} />
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -40,18 +46,34 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   locationIconContainer: {
-    width: 24,
-    height: 24,
+    width: 50,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  locationDot: {
-    width: 12,
-    height: 12,
+  crosshair: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  crosshairHorizontal: {
+    position: 'absolute',
+    width: 20,
+    height: 2,
     backgroundColor: '#000',
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#fff',
+  },
+  crosshairVertical: {
+    position: 'absolute',
+    width: 2,
+    height: 20,
+    backgroundColor: '#000',
+  },
+  crosshairCenter: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#000',
   },
 });
 
