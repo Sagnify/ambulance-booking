@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import { useTheme } from '../../context/ThemeContext';
+import * as Haptics from 'expo-haptics';
 
 interface SlideToBookProps {
   onSlideComplete: () => void;
@@ -14,9 +15,12 @@ const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const slideHintAnim = useRef(new Animated.Value(0)).current;
   const [isSliding, setIsSliding] = useState(false);
-  const sliderWidth = 280;
+  const [vibrationInterval, setVibrationInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
   const thumbWidth = 52;
-  const maxSlide = sliderWidth - thumbWidth - 8;
+  const padding = 4;
+  const maxSlide = Math.max(0, containerWidth - thumbWidth - (padding * 2));
 
   useEffect(() => {
     // Pop-in animation
@@ -29,50 +33,79 @@ const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName
       // Start slide hint animation after pop-in
       slideHint();
     });
+    
+    // Cleanup vibration on unmount
+    return () => {
+      if (vibrationInterval) {
+        clearInterval(vibrationInterval);
+      }
+    };
   }, []);
 
   const onGestureEvent = (event: any) => {
+    if (maxSlide <= 0) return; // Wait for layout
+    
     const { translationX } = event.nativeEvent;
     const clampedX = Math.max(0, Math.min(maxSlide, translationX));
     
     // Stop hint animation when user starts sliding
-    slideHintAnim.stopAnimation();
-    slideHintAnim.setValue(0);
+    if (translationX > 0) {
+      slideHintAnim.stopAnimation();
+      slideHintAnim.setValue(0);
+    }
     
     translateX.setValue(clampedX);
     
-    if (clampedX > maxSlide * 0.8) {
+    // Start continuous vibration when sliding starts
+    if (clampedX > 5 && !vibrationInterval) {
+      const interval = setInterval(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }, 100);
+      setVibrationInterval(interval);
+    }
+    
+    if (clampedX > maxSlide * 0.5 && !isCompleting) {
       setIsSliding(true);
-    } else {
+      setIsCompleting(true);
+    } else if (clampedX <= maxSlide * 0.5) {
       setIsSliding(false);
     }
   };
 
   const onHandlerStateChange = (event: any) => {
     if (event.nativeEvent.oldState === 4) {
+      // Stop vibration when gesture ends
+      if (vibrationInterval) {
+        clearInterval(vibrationInterval);
+        setVibrationInterval(null);
+      }
+      
       const { translationX } = event.nativeEvent;
       
-      if (translationX > maxSlide * 0.8) {
-        // Complete the slide
+      if (translationX > maxSlide * 0.5 || isCompleting) {
+        // Auto-complete when reaching 80%
         Animated.timing(translateX, {
           toValue: maxSlide,
           duration: 200,
           useNativeDriver: false,
         }).start(() => {
+          setIsCompleting(false);
           onSlideComplete();
         });
+        return;
       } else {
-        // Reset to start and restart hint animation
+        // Reset to start smoothly and restart hint animation
         Animated.spring(translateX, {
           toValue: 0,
           useNativeDriver: false,
-          tension: 100,
-          friction: 8,
+          tension: 120,
+          friction: 10,
         }).start(() => {
           // Restart hint animation after reset
           slideHint();
         });
         setIsSliding(false);
+        setIsCompleting(false);
       }
     }
   };
@@ -94,7 +127,13 @@ const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName
   };
 
   return (
-    <Animated.View style={[styles.sliderContainer, { backgroundColor: colors.primary, transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View 
+      style={[styles.sliderContainer, { backgroundColor: colors.primary, transform: [{ scale: scaleAnim }] }]}
+      onLayout={(event) => {
+        const { width } = event.nativeEvent.layout;
+        setContainerWidth(width);
+      }}
+    >
       <Text style={[styles.sliderText, { color: '#fff' }]}>Slide to book ambulance</Text>
       <PanGestureHandler
         onGestureEvent={onGestureEvent}
@@ -105,7 +144,8 @@ const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName
             styles.thumb, 
             { 
               transform: [{ translateX: Animated.add(translateX, slideHintAnim) }],
-              backgroundColor: isSliding ? colors.surface : colors.background
+              backgroundColor: isSliding ? colors.surface : colors.background,
+              left: padding
             }
           ]}
         >

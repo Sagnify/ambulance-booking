@@ -14,12 +14,14 @@ import {
 } from 'react-native';
 import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import LocationSnapButton from '../components/LocationSnapButton';
 import TopNavigation from '../components/TopNavigation';
 import MapViewComponent from '../components/MapView';
 import ServiceCard from '../components/ServiceCard';
 import EmergencyModal from '../components/EmergencyModal';
 import SlideToBook from '../components/SlideToBook';
+import LoadingScreen from './LoadingScreen';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import API from '../../services/api';
@@ -69,47 +71,23 @@ const HomeScreen = () => {
   const [selectedHospitalForBooking, setSelectedHospitalForBooking] = useState<any>(null);
   const [showBookingConfirmation, setShowBookingConfirmation] = useState(false);
   const [bookingHospitalData, setBookingHospitalData] = useState<any>(null);
+  const emergencyPulse = useRef(new Animated.Value(1)).current;
+  const [isLoading, setIsLoading] = useState(true);
 
 
-  // Get user location and nearby services
-  useEffect(() => {
-    const getLocation = async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setAddress('Location permission denied');
-          return;
-        }
-
-        const loc = await Location.getCurrentPositionAsync({ 
-          accuracy: Location.Accuracy.High
-        });
-        const { latitude, longitude } = loc.coords;
-
-        setUserLocation({ latitude, longitude });
-
-        // Reverse geocoding
-        const reverseGeocode = await Location.reverseGeocodeAsync({
-          latitude,
-          longitude,
-        });
-
-        if (reverseGeocode.length > 0) {
-          const location = reverseGeocode[0];
-          const readableAddress = `${location.street || ''} ${location.city || ''}, ${location.region || ''}`.trim();
-          setAddress(readableAddress || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-        }
-        
-        // Fetch nearby hospitals and ambulances
-        await fetchNearbyServices(latitude, longitude, searchRadius);
-      } catch (error) {
-        console.error('Location error:', error);
-        setAddress('Current location');
-      }
-    };
-
-    getLocation();
-  }, []);
+  // Handle loading completion
+  const handleLoadingComplete = async (fetchedAddress: string, location: { latitude: number; longitude: number }) => {
+    setAddress(fetchedAddress);
+    setUserLocation(location);
+    
+    // Fetch nearby hospitals and ambulances
+    await fetchNearbyServices(location.latitude, location.longitude, searchRadius);
+    
+    // Show main screen after a short delay
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+  };
   
   // Fetch nearby hospitals and ambulances from API
   const fetchNearbyServices = async (lat: number, lng: number, radius: number = searchRadius) => {
@@ -189,6 +167,7 @@ const HomeScreen = () => {
   
   // Handle slide to book completion
   const handleSlideToBookComplete = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setBookingHospitalData(selectedHospitalForBooking); // Store hospital data
     setSelectedHospitalForBooking(null); // Hide slider
     setShowBookingConfirmation(true);
@@ -231,8 +210,8 @@ const HomeScreen = () => {
             Authorization: `Bearer ${userToken}`
           }
         });
-        if (response.data.user) {
-          setUserName(response.data.user.name || 'User');
+        if (response.data.name) {
+          setUserName(response.data.name || 'User');
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -242,6 +221,37 @@ const HomeScreen = () => {
     };
     getUserData();
   }, [userId, userToken]);
+
+  // Emergency pulse animation
+  useEffect(() => {
+    let pulseAnimation: any;
+    
+    if (showEmergencyForm || showEmergencyDashboard || showHospitalSelection || showFinalConfirmation) {
+      const pulse = () => {
+        Animated.sequence([
+          Animated.timing(emergencyPulse, {
+            toValue: 0.3,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(emergencyPulse, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          })
+        ]).start(() => pulse());
+      };
+      pulse();
+    } else {
+      emergencyPulse.setValue(1);
+    }
+    
+    return () => {
+      if (pulseAnimation) {
+        pulseAnimation.stop();
+      }
+    };
+  }, [showEmergencyForm, showEmergencyDashboard, showHospitalSelection, showFinalConfirmation]);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
@@ -464,7 +474,7 @@ const HomeScreen = () => {
             <View style={styles.loadingSpinner}>
               <Text style={styles.spinnerText}>🏥</Text>
             </View>
-            <Text style={styles.loadingText}>Searching for the best available hospital</Text>
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Searching for the best available hospital</Text>
           </View>
         ) : showFinalConfirmation ? (
           <View>
@@ -472,31 +482,31 @@ const HomeScreen = () => {
               <Text style={styles.confirmationTitle}>Confirm Emergency Dispatch</Text>
             </View>
             
-            <View style={styles.summaryContainer}>
+            <View style={[styles.summaryContainer, { backgroundColor: colors.surface }]}>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Condition:</Text>
-                <Text style={styles.summaryValue}>{emergencyData.condition}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Condition:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{emergencyData.condition}</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Severity:</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Severity:</Text>
                 <Text style={[styles.summaryValue, styles.severityValue]}>{emergencyData.severity}</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Hospital:</Text>
-                <Text style={styles.summaryValue}>{selectedHospital?.name}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Hospital:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedHospital?.name}</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Distance:</Text>
-                <Text style={styles.summaryValue}>{selectedHospital?.distance}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Distance:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedHospital?.distance}</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>ETA:</Text>
-                <Text style={styles.summaryValue}>{selectedHospital?.eta}</Text>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>ETA:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedHospital?.eta}</Text>
               </View>
             </View>
             
             <View style={styles.finalButtons}>
-              <TouchableOpacity style={styles.backToFormButton} onPress={() => {
+              <TouchableOpacity style={[styles.backToFormButton, { backgroundColor: colors.surface }]} onPress={() => {
                 setShowFinalConfirmation(false);
                 setShowEmergencyForm(true);
                 setPanelPosition(height * 0.6);
@@ -507,7 +517,7 @@ const HomeScreen = () => {
                   friction: 8,
                 }).start();
               }}>
-                <Text style={styles.backToFormText}>‹ Back</Text>
+                <Text style={[styles.backToFormText, { color: colors.textSecondary }]}>‹ Back</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.finalConfirmButton} onPress={handleFinalConfirm}>
                 <Text style={styles.finalConfirmText}>🚨 BOOK AMBULANCE</Text>
@@ -520,38 +530,38 @@ const HomeScreen = () => {
               <TouchableOpacity onPress={() => {
                 handleEmergencyCancel();
               }} style={styles.backButton}>
-                <Text style={styles.backIcon}>‹</Text>
+                <Text style={[styles.backIcon, { color: colors.text }]}>‹</Text>
               </TouchableOpacity>
               <Text style={styles.emergencyTitle}>Emergency Details</Text>
             </View>
             
             <View style={styles.formContainer}>
-              <Text style={styles.formLabel}>Severity Level *</Text>
+              <Text style={[styles.formLabel, { color: colors.text }]}>Severity Level *</Text>
               <View style={styles.severityButtons}>
                 <TouchableOpacity 
-                  style={[styles.severityBtn, emergencyData.severity === 'Critical' && styles.selectedSeverity]}
+                  style={[styles.severityBtn, { backgroundColor: colors.surface, borderColor: colors.surface }, emergencyData.severity === 'Critical' && { backgroundColor: colors.background, borderColor: colors.primary }]}
                   onPress={() => setEmergencyData({...emergencyData, severity: 'Critical'})}
                 >
-                  <Text style={[styles.severityText, emergencyData.severity === 'Critical' && styles.selectedSeverityText]}>Critical</Text>
+                  <Text style={[styles.severityText, { color: colors.textSecondary }, emergencyData.severity === 'Critical' && { color: colors.text }]}>Critical</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  style={[styles.severityBtn, emergencyData.severity === 'Urgent' && styles.selectedSeverity]}
+                  style={[styles.severityBtn, { backgroundColor: colors.surface, borderColor: colors.surface }, emergencyData.severity === 'Urgent' && { backgroundColor: colors.background, borderColor: colors.primary }]}
                   onPress={() => setEmergencyData({...emergencyData, severity: 'Urgent'})}
                 >
-                  <Text style={[styles.severityText, emergencyData.severity === 'Urgent' && styles.selectedSeverityText]}>Urgent</Text>
+                  <Text style={[styles.severityText, { color: colors.textSecondary }, emergencyData.severity === 'Urgent' && { color: colors.text }]}>Urgent</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  style={[styles.severityBtn, emergencyData.severity === 'Moderate' && styles.selectedSeverity]}
+                  style={[styles.severityBtn, { backgroundColor: colors.surface, borderColor: colors.surface }, emergencyData.severity === 'Moderate' && { backgroundColor: colors.background, borderColor: colors.primary }]}
                   onPress={() => setEmergencyData({...emergencyData, severity: 'Moderate'})}
                 >
-                  <Text style={[styles.severityText, emergencyData.severity === 'Moderate' && styles.selectedSeverityText]}>Moderate</Text>
+                  <Text style={[styles.severityText, { color: colors.textSecondary }, emergencyData.severity === 'Moderate' && { color: colors.text }]}>Moderate</Text>
                 </TouchableOpacity>
               </View>
               
-              <Text style={styles.formLabel}>Visible Symptoms *</Text>
+              <Text style={[styles.formLabel, { color: colors.text }]}>Visible Symptoms *</Text>
               <View style={styles.dropdownContainer}>
                 <TouchableOpacity 
-                  style={styles.dropdown} 
+                  style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]} 
                   onPress={() => {
                     const newDropdownState = !showConditionDropdown;
                     setShowConditionDropdown(newDropdownState);
@@ -569,14 +579,14 @@ const HomeScreen = () => {
                     }
                   }}
                 >
-                  <Text style={[styles.dropdownText, emergencyData.condition && styles.selectedText]}>
+                  <Text style={[styles.dropdownText, { color: colors.textSecondary }, emergencyData.condition && { color: colors.text, fontWeight: '600' }]}>
                     {emergencyData.condition || 'Select symptoms...'}
                   </Text>
-                  <Text style={styles.dropdownArrow}>▼</Text>
+                  <Text style={[styles.dropdownArrow, { color: colors.textSecondary }]}>▼</Text>
                 </TouchableOpacity>
                 
                 {showConditionDropdown && (
-                  <View style={styles.dropdownList}>
+                  <View style={[styles.dropdownList, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     {conditions.map((condition, index) => (
                       <TouchableOpacity 
                         key={index}
@@ -596,7 +606,7 @@ const HomeScreen = () => {
                           }).start();
                         }}
                       >
-                        <Text style={styles.dropdownItemText}>{condition}</Text>
+                        <Text style={[styles.dropdownItemText, { color: colors.text }]}>{condition}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -604,7 +614,7 @@ const HomeScreen = () => {
               </View>
               
               <TouchableOpacity 
-                style={[styles.dispatchButton, (!emergencyData.condition || !emergencyData.severity) && styles.disabledButton]} 
+                style={[styles.dispatchButton, (!emergencyData.condition || !emergencyData.severity) && { backgroundColor: '#666' }]} 
                 onPress={handleEmergencySubmit}
                 disabled={!emergencyData.condition || !emergencyData.severity}
               >
@@ -619,28 +629,28 @@ const HomeScreen = () => {
               <TouchableOpacity onPress={() => {
                 handleEmergencyCancel();
               }}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
             
-            <View style={styles.hospitalInfo}>
-              <Text style={styles.hospitalLabel}>Dispatched to:</Text>
-              <Text style={styles.hospitalName}>City General Hospital</Text>
-              <Text style={styles.hospitalDistance}>2.3 km away</Text>
+            <View style={[styles.hospitalInfo, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.hospitalLabel, { color: colors.textSecondary }]}>Dispatched to:</Text>
+              <Text style={[styles.hospitalName, { color: colors.text }]}>City General Hospital</Text>
+              <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>2.3 km away</Text>
             </View>
             
             <View style={styles.ambulanceStatus}>
               <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Ambulance ETA:</Text>
+                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Ambulance ETA:</Text>
                 <Text style={styles.etaText}>{ambulanceETA}</Text>
               </View>
               <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Driver:</Text>
-                <Text style={styles.driverText}>Rajesh Kumar</Text>
+                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Driver:</Text>
+                <Text style={[styles.driverText, { color: colors.text }]}>Rajesh Kumar</Text>
               </View>
               <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Vehicle:</Text>
-                <Text style={styles.vehicleText}>DL-01-AB-1234</Text>
+                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Vehicle:</Text>
+                <Text style={[styles.vehicleText, { color: colors.text }]}>DL-01-AB-1234</Text>
               </View>
             </View>
             
@@ -658,37 +668,37 @@ const HomeScreen = () => {
           <View style={styles.bookingConfirmationContainer}>
             <View style={styles.bookingHeader}>
               <TouchableOpacity onPress={handleBookingCancel} style={styles.backButton}>
-                <Text style={styles.backIcon}>‹</Text>
+                <Text style={[styles.backIcon, { color: colors.text }]}>‹</Text>
               </TouchableOpacity>
-              <Text style={styles.bookingTitle}>Book Ambulance</Text>
+              <Text style={[styles.bookingTitle, { color: colors.text }]}>Book Ambulance</Text>
             </View>
             
-            <View style={styles.hospitalCard}>
-              <Text style={styles.hospitalCardName}>{bookingHospitalData?.name}</Text>
-              <Text style={styles.hospitalCardDistance}>{bookingHospitalData?.distance} km</Text>
+            <View style={[styles.hospitalCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[styles.hospitalCardName, { color: colors.text }]}>{bookingHospitalData?.name}</Text>
+              <Text style={[styles.hospitalCardDistance, { color: colors.textSecondary }]}>{bookingHospitalData?.distance} km</Text>
             </View>
             
-            <View style={styles.ambulanceCard}>
+            <View style={[styles.ambulanceCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <View style={styles.ambulanceRow}>
-                <Text style={styles.ambulanceLabel}>Status</Text>
-                <Text style={styles.ambulanceValue}>Available</Text>
+                <Text style={[styles.ambulanceLabel, { color: colors.textSecondary }]}>Status</Text>
+                <Text style={[styles.ambulanceValue, { color: colors.text }]}>Available</Text>
               </View>
               <View style={styles.ambulanceRow}>
-                <Text style={styles.ambulanceLabel}>ETA</Text>
-                <Text style={styles.ambulanceValue}>8-12 min</Text>
+                <Text style={[styles.ambulanceLabel, { color: colors.textSecondary }]}>ETA</Text>
+                <Text style={[styles.ambulanceValue, { color: colors.text }]}>8-12 min</Text>
               </View>
               <View style={styles.ambulanceRow}>
-                <Text style={styles.ambulanceLabel}>Driver</Text>
-                <Text style={styles.ambulanceValue}>Rajesh Kumar</Text>
+                <Text style={[styles.ambulanceLabel, { color: colors.textSecondary }]}>Driver</Text>
+                <Text style={[styles.ambulanceValue, { color: colors.text }]}>Rajesh Kumar</Text>
               </View>
             </View>
             
             <View style={styles.bookingButtonContainer}>
-              <TouchableOpacity style={styles.cancelButton} onPress={handleBookingCancel}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+              <TouchableOpacity style={[styles.cancelButton, { borderColor: colors.border }]} onPress={handleBookingCancel}>
+                <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton}>
-                <Text style={styles.confirmButtonText}>Confirm Booking</Text>
+              <TouchableOpacity style={[styles.confirmButton, { backgroundColor: '#fff' }]}>
+                <Text style={[styles.confirmButtonText, { color: '#000' }]}>Confirm Booking</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -782,10 +792,19 @@ const HomeScreen = () => {
     </PanGestureHandler>
   );
 
+  if (isLoading) {
+    return <LoadingScreen onLoadingComplete={handleLoadingComplete} />;
+  }
+
   return (
     <GestureHandlerRootView style={styles.container}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      
+      {/* Emergency Header Bar */}
+      {(showEmergencyForm || showEmergencyDashboard || showHospitalSelection || showFinalConfirmation) && (
+        <Animated.View style={[styles.emergencyHeaderBar, { opacity: emergencyPulse }]} />
+      )}
       
       <MapViewComponent 
         webViewRef={webViewRef} 
@@ -794,6 +813,7 @@ const HomeScreen = () => {
         selectedHospital={selectedHospital}
         hospitalData={hospitalData}
         ambulanceData={ambulanceData}
+
       />
 
       {/* Location Snap Button */}
@@ -1423,7 +1443,20 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 
-
+  // Emergency Header Bar
+  emergencyHeaderBar: {
+    backgroundColor: '#ff0000',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  emergencyHeaderText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
 
 });
 
