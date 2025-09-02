@@ -492,6 +492,8 @@ const HomeScreen = () => {
     const bookingData = {
       hospital_id: bookingHospitalData?.id || 1,
       pickup_location: address,
+      pickup_latitude: userLocation.latitude,
+      pickup_longitude: userLocation.longitude,
       destination: bookingHospitalData?.name,
       booking_type: 'Normal',
       patient_name: userName,
@@ -505,6 +507,8 @@ const HomeScreen = () => {
     const bookingData = {
       hospital_id: selectedHospital?.id || 1,
       pickup_location: address,
+      pickup_latitude: userLocation.latitude,
+      pickup_longitude: userLocation.longitude,
       destination: selectedHospital?.name,
       booking_type: 'Emergency',
       emergency_type: emergencyData.condition,
@@ -520,6 +524,8 @@ const HomeScreen = () => {
     const bookingData = {
       hospital_id: selectedHospital?.id || 1,
       pickup_location: address,
+      pickup_latitude: userLocation.latitude,
+      pickup_longitude: userLocation.longitude,
       destination: selectedHospital?.name,
       booking_type: 'Accident',
       severity: accidentData.injuriesVisible,

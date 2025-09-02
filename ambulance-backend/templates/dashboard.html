@@ -67,13 +67,48 @@
                 </div>
             </div>
 
-            <div class="bg-white rounded-lg shadow">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h2 class="text-lg font-semibold text-gray-900">Incoming Booking Requests</h2>
+            <!-- Side by Side Layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Incoming Requests Section -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-900 flex items-center">
+                            <span class="w-3 h-3 bg-red-500 rounded-full mr-2 animate-pulse"></span>
+                            Incoming Requests
+                            <span id="pendingCount" class="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">0</span>
+                        </h2>
+                        <button onclick="refreshData()" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                    <div class="p-6 max-h-96 overflow-y-auto">
+                        <div id="bookingRequests" class="space-y-4">
+                            <p class="text-gray-500 text-center py-8">No pending requests</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="p-6">
-                    <div id="bookingRequests" class="space-y-4">
-                        <p class="text-gray-500 text-center py-8">No pending requests</p>
+
+                <!-- Ongoing Pickups Section -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-900 flex items-center">
+                            <span class="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                            Ongoing Pickups
+                            <span id="ongoingCount" class="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">0</span>
+                        </h2>
+                        <div class="flex space-x-2">
+                            <select id="statusFilter" onchange="filterOngoing()" class="text-sm border rounded px-2 py-1">
+                                <option value="all">All Status</option>
+                                <option value="Assigned">Assigned</option>
+                                <option value="On Route">On Route</option>
+                                <option value="Arrived">Arrived</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="p-6 max-h-96 overflow-y-auto">
+                        <div id="ongoingPickups" class="space-y-4">
+                            <p class="text-gray-500 text-center py-8">No ongoing pickups</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -186,6 +221,9 @@
                 
                 // Update booking requests
                 updateBookingRequests(data.pending_bookings);
+                
+                // Update ongoing pickups
+                updateOngoingPickups(data.ongoing_bookings || []);
             } catch (error) {
                 console.error('Failed to load hospital data:', error);
                 // Don't redirect on network errors, just show error state
@@ -259,49 +297,173 @@
             }
         }
         
+        let ongoingBookings = [];
+        
         function updateBookingRequests(bookings) {
             const container = document.getElementById('bookingRequests');
+            document.getElementById('pendingCount').textContent = bookings.length;
             
             if (bookings.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-center py-8">No pending requests</p>';
+                container.innerHTML = '<div class="text-center py-12"><div class="text-6xl mb-4">✅</div><p class="text-gray-500">All caught up! No pending requests</p></div>';
                 return;
             }
             
             container.innerHTML = bookings.map(booking => `
-                <div class="border rounded-lg p-4 ${
-                    booking.booking_type === 'Emergency' ? 'border-red-200 bg-red-50' : 
-                    booking.booking_type === 'Accident' ? 'border-orange-200 bg-orange-50' : 'border-blue-200 bg-blue-50'
+                <div class="border-l-4 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow ${
+                    booking.booking_type === 'Emergency' ? 'border-l-red-500 bg-red-50' : 
+                    booking.booking_type === 'Accident' ? 'border-l-orange-500 bg-orange-50' : 'border-l-blue-500 bg-blue-50'
                 }">
-                    <div class="flex justify-between items-start mb-2">
-                        <div>
-                            <span class="px-2 py-1 text-xs font-semibold rounded ${
-                                booking.booking_type === 'Emergency' ? 'bg-red-100 text-red-800' : 
-                                booking.booking_type === 'Accident' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'
-                            }">${booking.booking_type}</span>
-                            ${booking.severity ? `<span class="ml-2 px-2 py-1 text-xs rounded bg-gray-100">${booking.severity}</span>` : ''}
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center space-x-2">
+                            <span class="px-3 py-1 text-xs font-bold rounded-full ${
+                                booking.booking_type === 'Emergency' ? 'bg-red-500 text-white' : 
+                                booking.booking_type === 'Accident' ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white'
+                            }">${booking.booking_type.toUpperCase()}</span>
+                            ${booking.severity ? `<span class="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700 font-medium">${booking.severity}</span>` : ''}
+                            ${booking.emergency_type ? `<span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-700 font-medium">${booking.emergency_type}</span>` : ''}
                         </div>
-                        <div class="text-sm font-medium ${
-                            booking.time_remaining <= 10 ? 'text-red-600' : 'text-gray-600'
-                        }">⏱️ ${booking.time_remaining}s</div>
+                        <div class="text-right">
+                            <div class="text-lg font-bold ${
+                                booking.time_remaining <= 10 ? 'text-red-600 animate-pulse' : 
+                                booking.time_remaining <= 20 ? 'text-orange-600' : 'text-green-600'
+                            }">⏱️ ${booking.time_remaining}s</div>
+                            <div class="text-xs text-gray-500">Auto-assign in</div>
+                        </div>
                     </div>
-                    <div class="text-sm text-gray-700 mb-2">
-                        <strong>Patient:</strong> ${booking.patient_name || 'Unknown'}<br>
-                        <strong>Phone:</strong> ${booking.patient_phone || 'N/A'}<br>
-                        <strong>Location:</strong> ${booking.pickup_location}
-                        ${booking.emergency_type ? `<br><strong>Type:</strong> ${booking.emergency_type}` : ''}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="space-y-2">
+                            <div class="flex items-center text-sm">
+                                <span class="w-16 text-gray-600 font-medium">Patient:</span>
+                                <span class="font-semibold text-gray-900">${booking.patient_name || 'Unknown'}</span>
+                            </div>
+                            <div class="flex items-center text-sm">
+                                <span class="w-16 text-gray-600 font-medium">Phone:</span>
+                                <span class="font-mono text-blue-600">${booking.patient_phone || 'N/A'}</span>
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-start text-sm">
+                                <span class="w-16 text-gray-600 font-medium flex-shrink-0">Location:</span>
+                                <span class="text-gray-900">${booking.pickup_location}</span>
+                            </div>
+                        </div>
                     </div>
                     <div class="flex space-x-2">
-                        <select onchange="assignAmbulance(${booking.id}, this.value)" class="flex-1 text-sm border rounded px-2 py-1">
-                            <option value="">Select Ambulance</option>
+                        <select onchange="assignAmbulance(${booking.id}, this.value)" class="flex-1 text-sm border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-blue-500 focus:outline-none">
+                            <option value="">🚑 Select Ambulance</option>
                             ${availableDriversOptions}
                         </select>
-                        <button onclick="assignAmbulance(${booking.id}, 'auto')" class="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600">Auto Assign</button>
+                        <button onclick="assignAmbulance(${booking.id}, 'auto')" class="px-4 py-2 text-sm bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-lg hover:from-gray-600 hover:to-gray-700 font-medium transition-all">
+                            ⚡ Auto Assign
+                        </button>
                     </div>
                 </div>
             `).join('');
         }
         
         let availableDriversOptions = '';
+        
+        function updateOngoingPickups(bookings) {
+            ongoingBookings = bookings;
+            const container = document.getElementById('ongoingPickups');
+            document.getElementById('ongoingCount').textContent = bookings.length;
+            
+            if (bookings.length === 0) {
+                container.innerHTML = '<div class="text-center py-12"><div class="text-6xl mb-4">🚛</div><p class="text-gray-500">No ongoing pickups</p></div>';
+                return;
+            }
+            
+            container.innerHTML = bookings.map(booking => {
+                const assignmentType = booking.auto_assigned ? 'AUTO' : 'MANUAL';
+                const timeElapsed = Math.floor((new Date() - new Date(booking.assigned_at)) / 1000 / 60);
+                
+                return `
+                    <div class="border rounded-lg p-4 bg-gradient-to-r from-green-50 to-blue-50 hover:shadow-lg transition-all">
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="flex items-center space-x-2">
+                                <span class="px-3 py-1 text-xs font-bold rounded-full ${
+                                    booking.booking_type === 'Emergency' ? 'bg-red-500 text-white' : 
+                                    booking.booking_type === 'Accident' ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white'
+                                }">${booking.booking_type}</span>
+                                <span class="px-2 py-1 text-xs rounded-full ${
+                                    booking.auto_assigned ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                                } font-medium">${assignmentType}</span>
+                                <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium">${booking.status}</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-bold text-green-600">${timeElapsed}m ago</div>
+                                <div class="text-xs text-gray-500">Assigned</div>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div class="space-y-2">
+                                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Patient Info</h4>
+                                <div class="text-sm font-semibold text-gray-900">${booking.patient_name || 'Unknown'}</div>
+                                <div class="text-sm font-mono text-blue-600">${booking.patient_phone || 'N/A'}</div>
+                            </div>
+                            <div class="space-y-2">
+                                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Driver Info</h4>
+                                <div class="text-sm font-semibold text-gray-900">${booking.ambulance?.driver_name || 'Unknown'}</div>
+                                <div class="text-sm text-gray-600">${booking.ambulance?.vehicle_number || 'N/A'}</div>
+                                <div class="text-sm font-mono text-green-600">${booking.ambulance?.driver_phone || 'N/A'}</div>
+                            </div>
+                            <div class="space-y-2">
+                                <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Location</h4>
+                                <div class="text-sm text-gray-900">${booking.pickup_location}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-between items-center">
+                            <div class="flex space-x-2">
+                                <select onchange="updateBookingStatus(${booking.id}, this.value)" class="text-sm border rounded px-2 py-1 ${
+                                    booking.status === 'Assigned' ? 'bg-yellow-100 text-yellow-800' :
+                                    booking.status === 'On Route' ? 'bg-blue-100 text-blue-800' :
+                                    booking.status === 'Arrived' ? 'bg-green-100 text-green-800' : 'bg-gray-100'
+                                }">
+                                    <option value="Assigned" ${booking.status === 'Assigned' ? 'selected' : ''}>📋 Assigned</option>
+                                    <option value="On Route" ${booking.status === 'On Route' ? 'selected' : ''}>🚗 On Route</option>
+                                    <option value="Arrived" ${booking.status === 'Arrived' ? 'selected' : ''}>📍 Arrived</option>
+                                    <option value="Completed" ${booking.status === 'Completed' ? 'selected' : ''}>✅ Completed</option>
+                                </select>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button onclick="callDriver('${booking.ambulance?.driver_phone}')" class="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors">
+                                    📞 Call
+                                </button>
+                                <button onclick="trackAmbulance(${booking.id})" class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+                                    📍 Track
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function refreshData() {
+            loadHospitalData();
+        }
+        
+        function filterOngoing() {
+            const filter = document.getElementById('statusFilter').value;
+            const filtered = filter === 'all' ? ongoingBookings : ongoingBookings.filter(b => b.status === filter);
+            updateOngoingPickups(filtered);
+        }
+        
+        function updateBookingStatus(bookingId, status) {
+            console.log('Update booking', bookingId, 'to status', status);
+        }
+        
+        function callDriver(phone) {
+            if (phone && phone !== 'N/A') {
+                window.open(`tel:${phone}`);
+            }
+        }
+        
+        function trackAmbulance(bookingId) {
+            console.log('Track ambulance for booking', bookingId);
+        }
         
         async function assignAmbulance(bookingId, driverId) {
             if (!driverId || driverId === '') return;

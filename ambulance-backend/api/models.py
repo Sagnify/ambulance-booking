@@ -55,6 +55,8 @@ class Booking(db.Model, TimestampMixin):
     hospital_id = db.Column(db.Integer, db.ForeignKey('hospitals.id'), nullable=False)
     ambulance_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
     pickup_location = db.Column(db.Text, nullable=False)
+    pickup_latitude = db.Column(db.Float, nullable=True)
+    pickup_longitude = db.Column(db.Float, nullable=True)
     destination = db.Column(db.Text, nullable=True)
     booking_type = db.Column(db.String(20), nullable=False)  # Emergency/Accident/Normal
     emergency_type = db.Column(db.String(50), nullable=True)  # Heart Attack, Stroke, etc.

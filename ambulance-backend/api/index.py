@@ -25,50 +25,7 @@ from flask import render_template, request
 app = create_app()
 CORS(app)
 
-# Helper function to seed hospitals
-def seed_sample_hospitals():
-    from .models import Hospital, Driver, User
-    
-    # Create default user for bookings
-    default_user = User(
-        name='Guest User',
-        phone_number='+91-0000000000',
-        email='guest@ambulance.com'
-    )
-    db.session.add(default_user)
-    
-    hospitals_data = [
-        {
-            'name': 'SSKM Hospital',
-            'address': '244, AJC Bose Road, Kolkata, West Bengal 700020',
-            'contact_number': '+91-33-2223-3526',
-            'latitude': 22.5448,
-            'longitude': 88.3426,
-            'type': 'government',
-            'emergency_services': True,
-            'ambulance_count': 12,
-            'hospital_id': 'hospital01',
-            'password': 'admin'
-        },
-        {
-            'name': 'Apollo Gleneagles Hospital',
-            'address': '58, Canal Circular Road, Kolkata, West Bengal 700054',
-            'contact_number': '+91-33-2320-3040',
-            'latitude': 22.5205,
-            'longitude': 88.3732,
-            'type': 'private',
-            'emergency_services': True,
-            'ambulance_count': 8,
-            'hospital_id': 'hospital02',
-            'password': 'admin'
-        }
-    ]
-    
-    for hospital_data in hospitals_data:
-        hospital = Hospital(**hospital_data)
-        db.session.add(hospital)
-    
-    db.session.commit()
+
 
 # Database health check
 @app.route('/api/health')
@@ -187,11 +144,32 @@ def hospital_dashboard_data(hospital_id):
             "emergency_type": b.emergency_type,
             "severity": b.severity,
             "pickup_location": b.pickup_location,
+            "pickup_latitude": b.pickup_latitude,
+            "pickup_longitude": b.pickup_longitude,
             "patient_name": b.patient_name,
             "patient_phone": b.patient_phone,
             "requested_at": b.requested_at.isoformat(),
             "time_remaining": max(0, 30 - int((datetime.utcnow() - b.requested_at).total_seconds()))
-        } for b in Booking.query.filter_by(hospital_id=hospital_id, status='Pending').all()]
+        } for b in Booking.query.filter_by(hospital_id=hospital_id, status='Pending').all()],
+        "ongoing_bookings": [{
+            "id": b.id,
+            "booking_type": b.booking_type,
+            "emergency_type": b.emergency_type,
+            "severity": b.severity,
+            "pickup_location": b.pickup_location,
+            "pickup_latitude": b.pickup_latitude,
+            "pickup_longitude": b.pickup_longitude,
+            "patient_name": b.patient_name,
+            "patient_phone": b.patient_phone,
+            "status": b.status,
+            "assigned_at": b.assigned_at.isoformat() if b.assigned_at else None,
+            "auto_assigned": b.auto_assigned,
+            "ambulance": {
+                "driver_name": Driver.query.get(b.ambulance_id).name if b.ambulance_id else None,
+                "driver_phone": Driver.query.get(b.ambulance_id).phone_number if b.ambulance_id else None,
+                "vehicle_number": Driver.query.get(b.ambulance_id).vehicle_number if b.ambulance_id else None
+            } if b.ambulance_id else None
+        } for b in Booking.query.filter_by(hospital_id=hospital_id).filter(Booking.status.in_(['Assigned', 'On Route', 'Arrived'])).all()]
     })
 
 # Driver Management APIs
@@ -270,6 +248,7 @@ def create_booking():
             
             # Check if hospitals exist, if not seed them
             if Hospital.query.count() == 0:
+                from . import seed_sample_hospitals
                 seed_sample_hospitals()
         
         data = request.get_json()
@@ -298,6 +277,8 @@ def create_booking():
             user_id=default_user.id,
             hospital_id=data['hospital_id'],
             pickup_location=data['pickup_location'],
+            pickup_latitude=data.get('pickup_latitude'),
+            pickup_longitude=data.get('pickup_longitude'),
             destination=data.get('destination'),
             booking_type=data['booking_type'],
             emergency_type=data.get('emergency_type'),
