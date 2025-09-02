@@ -17,7 +17,7 @@ import MapViewComponent from '../components/MapView';
 import { useTheme } from '../../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
-const API_BASE_URL = 'https://ambulance-backend-iota.vercel.app/api';
+const API_BASE_URL = 'https://ambulance-booking-roan.vercel.app/api';
 
 const LiveTrackingScreen = () => {
   const route = useRoute();
@@ -66,8 +66,31 @@ const LiveTrackingScreen = () => {
 
   const createBooking = async () => {
     console.log('Creating booking with data:', bookingData);
-    // Create local booking since API is not available
-    setBooking({ booking_id: Date.now() });
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...bookingData,
+          destination: bookingData.destination || bookingData.pickup_location
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setBooking({ booking_id: result.booking_id });
+      } else {
+        const errorText = await response.text();
+        console.error('Booking API Error:', response.status, errorText);
+        throw new Error(`API Error: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Booking creation failed:', error);
+      Alert.alert('Error', 'Backend not available. Please try again later.');
+    }
   };
 
   const checkBookingStatus = async () => {
@@ -95,25 +118,30 @@ const LiveTrackingScreen = () => {
   const autoAssignAmbulance = async () => {
     if (!booking || isAssigned) return;
     
-    // Simulate driver assignment from hospital data
-    const drivers = [
-      { name: 'Rajesh Kumar', phone: '+91-9876543210', vehicle: 'WB-01-AB-1234' },
-      { name: 'Amit Singh', phone: '+91-9876543211', vehicle: 'WB-01-AB-1235' },
-      { name: 'Suresh Das', phone: '+91-9876543212', vehicle: 'WB-01-AB-1236' }
-    ];
-    
-    const randomDriver = drivers[Math.floor(Math.random() * drivers.length)];
-    
-    setIsAssigned(true);
-    setAssignedDriver({
-      driver_name: randomDriver.name,
-      driver_phone: randomDriver.phone,
-      vehicle_number: randomDriver.vehicle
-    });
-    setAmbulanceLocation({
-      latitude: userLocation.latitude + 0.01,
-      longitude: userLocation.longitude + 0.01
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${booking.booking_id}/auto-assign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.driver) {
+          setIsAssigned(true);
+          setAssignedDriver(result.driver);
+          setAmbulanceLocation({
+            latitude: userLocation.latitude + 0.01,
+            longitude: userLocation.longitude + 0.01
+          });
+        }
+      } else {
+        console.error('Auto-assignment failed:', response.status);
+      }
+    } catch (error) {
+      console.error('Auto-assignment API error:', error);
+    }
   };
 
   const getThemeColor = () => {

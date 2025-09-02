@@ -56,6 +56,69 @@ def hospital_login():
     
     return jsonify({"message": "Invalid credentials"}), 401
 
+# Booking Routes
+@app.route('/api/bookings', methods=['POST'])
+def create_booking():
+    from flask import request, jsonify
+    from .models import Booking
+    import json
+    
+    data = request.get_json()
+    
+    booking = Booking(
+        hospital_id=data['hospital_id'],
+        pickup_location=data['pickup_location'],
+        destination=data.get('destination'),
+        booking_type=data['booking_type'],
+        emergency_type=data.get('emergency_type'),
+        severity=data.get('severity'),
+        accident_details=json.dumps(data.get('accident_details', {})) if data.get('accident_details') else None,
+        patient_name=data.get('patient_name'),
+        patient_phone=data.get('patient_phone')
+    )
+    
+    db.session.add(booking)
+    db.session.commit()
+    
+    return jsonify({
+        "booking_id": booking.id,
+        "status": "Pending",
+        "message": "Booking created successfully"
+    })
+
+@app.route('/api/bookings/<int:booking_id>/auto-assign', methods=['POST'])
+def auto_assign_ambulance(booking_id):
+    from flask import jsonify
+    from .models import Booking, Driver
+    from datetime import datetime
+    
+    booking = Booking.query.get_or_404(booking_id)
+    
+    available_driver = Driver.query.filter_by(
+        hospital_id=booking.hospital_id,
+        status='Available'
+    ).first()
+    
+    if available_driver:
+        booking.ambulance_id = available_driver.id
+        booking.status = 'Assigned'
+        booking.assigned_at = datetime.utcnow()
+        booking.auto_assigned = True
+        available_driver.status = 'Busy'
+        
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Ambulance auto-assigned",
+            "driver": {
+                "driver_name": available_driver.name,
+                "driver_phone": available_driver.phone_number,
+                "vehicle_number": available_driver.vehicle_number
+            }
+        })
+    
+    return jsonify({"message": "No available ambulance"}), 404
+
 # Hospital Dashboard Data
 @app.route('/api/hospital/<int:hospital_id>/dashboard')
 def hospital_dashboard_data(hospital_id):

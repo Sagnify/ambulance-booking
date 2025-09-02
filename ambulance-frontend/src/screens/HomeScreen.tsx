@@ -107,14 +107,14 @@ const HomeScreen = () => {
     try {
       // Try to fetch from API - replace with actual endpoints
       const [hospitalsResponse, ambulancesResponse] = await Promise.allSettled([
-        API.get(`/api/hospitals/nearby?lat=${lat}&lng=${lng}&radius=${radius}`),
-        API.get(`/api/ambulances/nearby?lat=${lat}&lng=${lng}&radius=${radius}`)
+        fetch(`https://ambulance-booking-roan.vercel.app/api/hospitals/nearby?lat=${lat}&lng=${lng}&radius=${radius}`).then(r => r.json()),
+        fetch(`https://ambulance-booking-roan.vercel.app/api/ambulances/nearby?lat=${lat}&lng=${lng}&radius=${radius}`).then(r => r.json())
       ]);
       
       // Set hospital data if API succeeds
-      if (hospitalsResponse.status === 'fulfilled' && hospitalsResponse.value.data.hospitals) {
-        setHospitalData(hospitalsResponse.value.data.hospitals);
-        setFilteredHospitals(hospitalsResponse.value.data.hospitals);
+      if (hospitalsResponse.status === 'fulfilled' && hospitalsResponse.value.hospitals) {
+        setHospitalData(hospitalsResponse.value.hospitals);
+        setFilteredHospitals(hospitalsResponse.value.hospitals);
       } else {
         setHospitalData([]);
         setFilteredHospitals([]);
