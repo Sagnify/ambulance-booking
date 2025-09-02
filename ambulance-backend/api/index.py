@@ -58,7 +58,7 @@ def hospital_login():
 
 # Booking Routes
 @app.route('/api/bookings', methods=['POST'])
-def create_booking():
+def create_new_booking():
     from flask import request, jsonify
     from .models import Booking
     import json
@@ -87,7 +87,7 @@ def create_booking():
     })
 
 @app.route('/api/bookings/<int:booking_id>/auto-assign', methods=['POST'])
-def auto_assign_ambulance(booking_id):
+def auto_assign_driver(booking_id):
     from flask import jsonify
     from .models import Booking, Driver
     from datetime import datetime
