@@ -25,27 +25,37 @@ def create_app(config_name=None):
     jwt.init_app(app)
 
     # Register blueprints
-    from .otp_routes import otp_bp
-    from .auth_routes import auth_bp
-    from .health_routes import health_bp
+    try:
+        from .otp_routes import otp_bp
+        app.register_blueprint(otp_bp)
+    except ImportError:
+        pass
+    
+    try:
+        from .auth_routes import auth_bp
+        app.register_blueprint(auth_bp)
+    except ImportError:
+        pass
+    
+    try:
+        from .health_routes import health_bp
+        app.register_blueprint(health_bp)
+    except ImportError:
+        pass
+    
     try:
         from .hospital_routes import hospital_bp
         app.register_blueprint(hospital_bp)
     except ImportError:
         pass
-    app.register_blueprint(otp_bp)
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(health_bp)
 
     @app.route('/')
     def api_list():
-        from .models import Hospital, Driver
-        
-        # Get hospital count
         try:
+            from .models import Hospital, Driver
             hospital_count = Hospital.query.count()
             driver_count = Driver.query.count()
-        except:
+        except Exception as e:
             hospital_count = 0
             driver_count = 0
             
