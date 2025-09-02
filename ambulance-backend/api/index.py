@@ -27,7 +27,15 @@ CORS(app)
 
 # Helper function to seed hospitals
 def seed_sample_hospitals():
-    from .models import Hospital, Driver
+    from .models import Hospital, Driver, User
+    
+    # Create default user for bookings
+    default_user = User(
+        name='Guest User',
+        phone_number='+91-0000000000',
+        email='guest@ambulance.com'
+    )
+    db.session.add(default_user)
     
     hospitals_data = [
         {
@@ -89,6 +97,18 @@ def health_check():
             "database": "error",
             "error": str(e)
         }), 500
+
+# Database reset endpoint
+@app.route('/api/reset-db', methods=['POST'])
+def reset_database():
+    from flask import jsonify
+    try:
+        db.drop_all()
+        db.create_all()
+        seed_sample_hospitals()
+        return jsonify({"message": "Database reset successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Hospital Dashboard Routes
 @app.route('/dashboard')
@@ -262,7 +282,20 @@ def create_booking():
                 "message": "Invalid hospital ID"
             }), 400
         
+        # Get or create default user
+        from .models import User
+        default_user = User.query.filter_by(phone_number='+91-0000000000').first()
+        if not default_user:
+            default_user = User(
+                name='Guest User',
+                phone_number='+91-0000000000',
+                email='guest@ambulance.com'
+            )
+            db.session.add(default_user)
+            db.session.commit()
+        
         booking = Booking(
+            user_id=default_user.id,
             hospital_id=data['hospital_id'],
             pickup_location=data['pickup_location'],
             destination=data.get('destination'),
