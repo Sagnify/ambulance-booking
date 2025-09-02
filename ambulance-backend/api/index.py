@@ -25,6 +25,71 @@ from flask import render_template, request
 app = create_app()
 CORS(app)
 
+# Helper function to seed hospitals
+def seed_sample_hospitals():
+    from .models import Hospital, Driver
+    
+    hospitals_data = [
+        {
+            'name': 'SSKM Hospital',
+            'address': '244, AJC Bose Road, Kolkata, West Bengal 700020',
+            'contact_number': '+91-33-2223-3526',
+            'latitude': 22.5448,
+            'longitude': 88.3426,
+            'type': 'government',
+            'emergency_services': True,
+            'ambulance_count': 12,
+            'hospital_id': 'hospital01',
+            'password': 'admin'
+        },
+        {
+            'name': 'Apollo Gleneagles Hospital',
+            'address': '58, Canal Circular Road, Kolkata, West Bengal 700054',
+            'contact_number': '+91-33-2320-3040',
+            'latitude': 22.5205,
+            'longitude': 88.3732,
+            'type': 'private',
+            'emergency_services': True,
+            'ambulance_count': 8,
+            'hospital_id': 'hospital02',
+            'password': 'admin'
+        }
+    ]
+    
+    for hospital_data in hospitals_data:
+        hospital = Hospital(**hospital_data)
+        db.session.add(hospital)
+    
+    db.session.commit()
+
+# Database health check
+@app.route('/api/health')
+def health_check():
+    from flask import jsonify
+    from .models import Hospital, Driver, Booking
+    
+    try:
+        # Test database connection
+        hospital_count = Hospital.query.count()
+        driver_count = Driver.query.count()
+        booking_count = Booking.query.count()
+        
+        return jsonify({
+            "status": "healthy",
+            "database": "connected",
+            "counts": {
+                "hospitals": hospital_count,
+                "drivers": driver_count,
+                "bookings": booking_count
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy",
+            "database": "error",
+            "error": str(e)
+        }), 500
+
 # Hospital Dashboard Routes
 @app.route('/dashboard')
 def dashboard():
@@ -175,31 +240,54 @@ def delete_driver(hospital_id, driver_id):
 @app.route('/api/bookings', methods=['POST'])
 def create_booking():
     from flask import request, jsonify
-    from .models import Booking, Driver
+    from .models import Booking, Driver, Hospital
     import json
     
-    data = request.get_json()
-    
-    booking = Booking(
-        hospital_id=data['hospital_id'],
-        pickup_location=data['pickup_location'],
-        destination=data.get('destination'),
-        booking_type=data['booking_type'],
-        emergency_type=data.get('emergency_type'),
-        severity=data.get('severity'),
-        accident_details=json.dumps(data.get('accident_details', {})),
-        patient_name=data.get('patient_name'),
-        patient_phone=data.get('patient_phone')
-    )
-    
-    db.session.add(booking)
-    db.session.commit()
-    
-    return jsonify({
-        "booking_id": booking.id,
-        "status": "Pending",
-        "message": "Booking created successfully"
-    })
+    try:
+        # Ensure tables exist
+        with app.app_context():
+            db.create_all()
+            
+            # Check if hospitals exist, if not seed them
+            if Hospital.query.count() == 0:
+                seed_sample_hospitals()
+        
+        data = request.get_json()
+        
+        # Validate hospital exists
+        hospital = Hospital.query.get(data['hospital_id'])
+        if not hospital:
+            return jsonify({
+                "error": "Hospital not found",
+                "message": "Invalid hospital ID"
+            }), 400
+        
+        booking = Booking(
+            hospital_id=data['hospital_id'],
+            pickup_location=data['pickup_location'],
+            destination=data.get('destination'),
+            booking_type=data['booking_type'],
+            emergency_type=data.get('emergency_type'),
+            severity=data.get('severity'),
+            accident_details=json.dumps(data.get('accident_details', {})),
+            patient_name=data.get('patient_name'),
+            patient_phone=data.get('patient_phone')
+        )
+        
+        db.session.add(booking)
+        db.session.commit()
+        
+        return jsonify({
+            "booking_id": booking.id,
+            "status": "Pending",
+            "message": "Booking created successfully"
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to create booking"
+        }), 500
 
 @app.route('/api/bookings/<int:booking_id>/assign', methods=['POST'])
 def assign_ambulance(booking_id):

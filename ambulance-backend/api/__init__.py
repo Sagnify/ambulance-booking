@@ -49,6 +49,13 @@ def create_app(config_name=None):
     except ImportError:
         pass
 
+    # Initialize database tables
+    with app.app_context():
+        try:
+            db.create_all()
+        except Exception as e:
+            print(f"Database initialization error: {e}")
+    
     @app.route('/')
     def api_list():
         try:
