@@ -7,8 +7,10 @@ def create_app(config_name=None):
     # Set instance_path to a writable location
     instance_path = '/tmp/instance'  # /tmp is writable on Lambda or read-only filesystems
     os.makedirs(instance_path, exist_ok=True)
-
-    app = Flask(__name__, instance_path=instance_path, instance_relative_config=True)
+    
+    # Set template folder to the correct path
+    template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
+    app = Flask(__name__, instance_path=instance_path, instance_relative_config=True, template_folder=template_dir)
 
     # Pick config based on FLASK_ENV or default to development
     if config_name is None:
@@ -39,13 +41,16 @@ def create_app(config_name=None):
         # Get hospital count
         try:
             hospital_count = Hospital.query.count()
+            driver_count = Driver.query.count()
         except:
             hospital_count = 0
+            driver_count = 0
             
         return {
             "message": "Ambulance Booking API",
             "statistics": {
                 "total_hospitals": hospital_count,
+                "total_drivers": driver_count,
                 "total_organizations": hospital_count  # Same as hospitals for now
             },
             "endpoints": {
@@ -67,6 +72,9 @@ def create_app(config_name=None):
                     "POST /api/auth/login": "Send OTP for existing user login",
                     "POST /api/auth/login/verify": "Verify OTP and authenticate user",
                     "PUT /api/auth/profile": "Update user profile details"
+                },
+                "Driver Routes": {
+                    "GET /api/drivers": "Get all drivers from all hospitals with details"
                 }
             }
         }

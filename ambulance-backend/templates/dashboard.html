@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <header class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900" id="hospitalName">🏥 Loading...</h1>
+                    <p class="text-sm text-gray-500" id="hospitalAddress"></p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <nav class="flex space-x-4">
+                        <button id="dashboardTab" class="px-3 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600">Dashboard</button>
+                        <button id="driversTab" class="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">Drivers</button>
+                    </nav>
+                    <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium">Logout</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Dashboard Tab -->
+        <div id="dashboardContent">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-green-100 rounded-lg"><span class="text-2xl">🚑</span></div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Available Ambulances</p>
+                            <p class="text-2xl font-bold text-green-600" id="availableAmbulances">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-red-100 rounded-lg"><span class="text-2xl">🚨</span></div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Busy Ambulances</p>
+                            <p class="text-2xl font-bold text-red-600" id="busyAmbulances">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-blue-100 rounded-lg"><span class="text-2xl">👥</span></div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Total Drivers</p>
+                            <p class="text-2xl font-bold text-blue-600" id="totalDrivers">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-purple-100 rounded-lg"><span class="text-2xl">📋</span></div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Total Bookings</p>
+                            <p class="text-2xl font-bold text-purple-600" id="totalBookings">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-900">Incoming Booking Requests</h2>
+                </div>
+                <div class="p-6">
+                    <div id="bookingRequests" class="space-y-4">
+                        <p class="text-gray-500 text-center py-8">No pending requests</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drivers Tab -->
+        <div id="driversContent" class="hidden">
+            <div class="bg-white rounded-lg shadow mb-6">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-900">Driver Management</h2>
+                    <button id="addDriverBtn" class="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600">Add Driver</button>
+                </div>
+                <div class="p-6">
+                    <div id="driversTable" class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Login ID</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Password</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="driversTableBody" class="bg-white divide-y divide-gray-200">
+                                <tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">Loading drivers...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add Driver Modal -->
+    <div id="addDriverModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Add New Driver</h3>
+            <form id="addDriverForm">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Name</label>
+                        <input type="text" id="driverName" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Phone</label>
+                        <input type="tel" id="driverPhone" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Vehicle Number</label>
+                        <input type="text" id="driverVehicle" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" id="cancelAddDriver" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600">Add Driver</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = window.location.origin;
+        let hospitalId = null;
+        let currentTab = 'dashboard';
+        
+        async function loadHospitalData() {
+            const token = localStorage.getItem('hospital_token');
+            hospitalId = localStorage.getItem('hospital_id');
+            
+            if (!token || !hospitalId) {
+                window.location.href = '/dashboard/login';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/hospital/${hospitalId}/dashboard`);
+                
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 404) {
+                        localStorage.clear();
+                        window.location.href = '/dashboard/login';
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Update hospital info
+                document.getElementById('hospitalName').textContent = `🏥 ${data.hospital.name}`;
+                document.getElementById('hospitalAddress').textContent = data.hospital.address || '';
+                
+                // Update stats
+                document.getElementById('availableAmbulances').textContent = data.stats.available_ambulances;
+                document.getElementById('busyAmbulances').textContent = data.stats.busy_ambulances;
+                document.getElementById('totalDrivers').textContent = data.stats.total_drivers;
+                document.getElementById('totalBookings').textContent = data.stats.total_bookings;
+                
+                // Update available drivers options for booking assignment
+                availableDriversOptions = data.drivers
+                    .filter(d => d.status === 'Available')
+                    .map(d => `<option value="${d.id}">${d.name} (${d.vehicle})</option>`)
+                    .join('');
+                
+                // Update drivers table
+                updateDriversTable(data.drivers);
+                
+                // Update booking requests
+                updateBookingRequests(data.pending_bookings);
+            } catch (error) {
+                console.error('Failed to load hospital data:', error);
+                // Don't redirect on network errors, just show error state
+                document.getElementById('hospitalName').textContent = '🏥 Error Loading Data';
+            }
+        }
+        
+        function updateDriversTable(drivers) {
+            const tbody = document.getElementById('driversTableBody');
+            
+            if (drivers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">No drivers found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = drivers.map(driver => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${driver.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${driver.phone}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${driver.vehicle}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-600">${driver.login_id || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">${driver.password || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <select onchange="updateDriverStatus(${driver.id}, this.value)" class="px-2 py-1 text-xs font-semibold rounded-full border-0 ${
+                            driver.status === 'Available' ? 'bg-green-100 text-green-800' : 
+                            driver.status === 'Busy' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                        }" style="appearance: none; cursor: pointer;">
+                            <option value="Available" ${driver.status === 'Available' ? 'selected' : ''}>🟢 Available</option>
+                            <option value="Busy" ${driver.status === 'Busy' ? 'selected' : ''}>🔴 Busy</option>
+                            <option value="Offline" ${driver.status === 'Offline' ? 'selected' : ''}>⚫ Offline</option>
+                        </select>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button onclick="deleteDriver(${driver.id})" class="text-red-600 hover:text-red-900">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        async function addDriver(name, phone, vehicle) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/hospital/${hospitalId}/drivers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone, vehicle })
+                });
+                
+                if (response.ok) {
+                    loadHospitalData();
+                    document.getElementById('addDriverModal').classList.add('hidden');
+                    document.getElementById('addDriverForm').reset();
+                }
+            } catch (error) {
+                console.error('Failed to add driver:', error);
+            }
+        }
+        
+        async function deleteDriver(driverId) {
+            if (!confirm('Are you sure you want to delete this driver?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/hospital/${hospitalId}/drivers/${driverId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadHospitalData();
+                }
+            } catch (error) {
+                console.error('Failed to delete driver:', error);
+            }
+        }
+        
+        function updateBookingRequests(bookings) {
+            const container = document.getElementById('bookingRequests');
+            
+            if (bookings.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">No pending requests</p>';
+                return;
+            }
+            
+            container.innerHTML = bookings.map(booking => `
+                <div class="border rounded-lg p-4 ${
+                    booking.booking_type === 'Emergency' ? 'border-red-200 bg-red-50' : 
+                    booking.booking_type === 'Accident' ? 'border-orange-200 bg-orange-50' : 'border-blue-200 bg-blue-50'
+                }">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="px-2 py-1 text-xs font-semibold rounded ${
+                                booking.booking_type === 'Emergency' ? 'bg-red-100 text-red-800' : 
+                                booking.booking_type === 'Accident' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'
+                            }">${booking.booking_type}</span>
+                            ${booking.severity ? `<span class="ml-2 px-2 py-1 text-xs rounded bg-gray-100">${booking.severity}</span>` : ''}
+                        </div>
+                        <div class="text-sm font-medium ${
+                            booking.time_remaining <= 10 ? 'text-red-600' : 'text-gray-600'
+                        }">⏱️ ${booking.time_remaining}s</div>
+                    </div>
+                    <div class="text-sm text-gray-700 mb-2">
+                        <strong>Patient:</strong> ${booking.patient_name || 'Unknown'}<br>
+                        <strong>Phone:</strong> ${booking.patient_phone || 'N/A'}<br>
+                        <strong>Location:</strong> ${booking.pickup_location}
+                        ${booking.emergency_type ? `<br><strong>Type:</strong> ${booking.emergency_type}` : ''}
+                    </div>
+                    <div class="flex space-x-2">
+                        <select onchange="assignAmbulance(${booking.id}, this.value)" class="flex-1 text-sm border rounded px-2 py-1">
+                            <option value="">Select Ambulance</option>
+                            ${availableDriversOptions}
+                        </select>
+                        <button onclick="assignAmbulance(${booking.id}, 'auto')" class="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600">Auto Assign</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        let availableDriversOptions = '';
+        
+        async function assignAmbulance(bookingId, driverId) {
+            if (!driverId || driverId === '') return;
+            
+            try {
+                const endpoint = driverId === 'auto' ? 
+                    `/api/bookings/${bookingId}/auto-assign` : 
+                    `/api/bookings/${bookingId}/assign`;
+                
+                const body = driverId === 'auto' ? {} : { driver_id: parseInt(driverId) };
+                
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                if (response.ok) {
+                    loadHospitalData(); // Refresh data
+                }
+            } catch (error) {
+                console.error('Failed to assign ambulance:', error);
+            }
+        }
+        
+        // Status change is now handled directly by the dropdown
+        
+        async function updateDriverStatus(driverId, status) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/hospital/${hospitalId}/drivers/${driverId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                
+                if (response.ok) {
+                    loadHospitalData();
+                }
+            } catch (error) {
+                console.error('Failed to update driver:', error);
+            }
+        }
+        
+        // Tab switching
+        document.getElementById('dashboardTab').addEventListener('click', function() {
+            currentTab = 'dashboard';
+            document.getElementById('dashboardContent').classList.remove('hidden');
+            document.getElementById('driversContent').classList.add('hidden');
+            this.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
+            this.classList.remove('text-gray-500');
+            document.getElementById('driversTab').classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
+            document.getElementById('driversTab').classList.add('text-gray-500');
+        });
+        
+        document.getElementById('driversTab').addEventListener('click', function() {
+            currentTab = 'drivers';
+            document.getElementById('driversContent').classList.remove('hidden');
+            document.getElementById('dashboardContent').classList.add('hidden');
+            this.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
+            this.classList.remove('text-gray-500');
+            document.getElementById('dashboardTab').classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
+            document.getElementById('dashboardTab').classList.add('text-gray-500');
+        });
+        
+        // Modal handling
+        document.getElementById('addDriverBtn').addEventListener('click', function() {
+            document.getElementById('addDriverModal').classList.remove('hidden');
+            document.getElementById('addDriverModal').classList.add('flex');
+        });
+        
+        document.getElementById('cancelAddDriver').addEventListener('click', function() {
+            document.getElementById('addDriverModal').classList.add('hidden');
+            document.getElementById('addDriverModal').classList.remove('flex');
+        });
+        
+        document.getElementById('addDriverForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('driverName').value;
+            const phone = document.getElementById('driverPhone').value;
+            const vehicle = document.getElementById('driverVehicle').value;
+            addDriver(name, phone, vehicle);
+        });
+        
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            localStorage.removeItem('hospital_token');
+            localStorage.removeItem('hospital_id');
+            localStorage.removeItem('hospital_name');
+            window.location.href = '/dashboard/login';
+        });
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            loadHospitalData();
+            setInterval(loadHospitalData, 5000); // Refresh every 5 seconds for real-time updates
+        });
+    </script>
+</body>
+</html>

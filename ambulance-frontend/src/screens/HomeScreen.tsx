@@ -9,18 +9,20 @@ import {
   StatusBar,
   ScrollView,
   Animated,
-  TextInput,
   Keyboard 
 } from 'react-native';
 import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
-import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import LocationSnapButton from '../components/LocationSnapButton';
 import TopNavigation from '../components/TopNavigation';
 import MapViewComponent from '../components/MapView';
-import ServiceCard from '../components/ServiceCard';
 import EmergencyModal from '../components/EmergencyModal';
 import SlideToBook from '../components/SlideToBook';
+import HospitalSearch from '../components/HospitalSearch';
+import EmergencyButtons from '../components/EmergencyButtons';
+import HospitalList from '../components/HospitalList';
+import EmergencyForm from '../components/EmergencyForm';
+import AccidentForm from '../components/AccidentForm';
 import LoadingScreen from './LoadingScreen';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -33,7 +35,7 @@ const { width, height } = Dimensions.get('window');
 const HomeScreen = () => {
   const { logout, userId, userToken } = useAuth();
   const { isDarkMode, colors } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [address, setAddress] = useState('Fetching location...');
   const [userLocation, setUserLocation] = useState({ 
     latitude: 22.4675, 
@@ -54,14 +56,25 @@ const HomeScreen = () => {
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [showEmergencyDashboard, setShowEmergencyDashboard] = useState(false);
+  const [showAccidentForm, setShowAccidentForm] = useState(false);
   const [emergencyData, setEmergencyData] = useState({
     condition: '',
     severity: '',
     instructions: ''
   });
+  const [accidentData, setAccidentData] = useState({
+    type: '',
+    peopleInvolved: '',
+    injuriesVisible: '',
+    policeRequired: false,
+    towRequired: false
+  });
   const [showConditionDropdown, setShowConditionDropdown] = useState(false);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showHospitalSelection, setShowHospitalSelection] = useState(false);
+  const [showAccidentHospitalSelection, setShowAccidentHospitalSelection] = useState(false);
   const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
+  const [showAccidentConfirmation, setShowAccidentConfirmation] = useState(false);
   const [selectedHospital, setSelectedHospital] = useState<{name: string, distance: string, eta: string, lat: number, lng: number} | null>(null);
   const [ambulanceETA, setAmbulanceETA] = useState('8-12 min');
   const [hospitalData, setHospitalData] = useState<any[]>([]);
@@ -222,11 +235,11 @@ const HomeScreen = () => {
     getUserData();
   }, [userId, userToken]);
 
-  // Emergency pulse animation
+  // Emergency/Accident pulse animation
   useEffect(() => {
     let pulseAnimation: any;
     
-    if (showEmergencyForm || showEmergencyDashboard || showHospitalSelection || showFinalConfirmation) {
+    if (showEmergencyForm || showEmergencyDashboard || showHospitalSelection || showFinalConfirmation || showAccidentForm || showAccidentConfirmation || showAccidentHospitalSelection) {
       const pulse = () => {
         Animated.sequence([
           Animated.timing(emergencyPulse, {
@@ -251,7 +264,7 @@ const HomeScreen = () => {
         pulseAnimation.stop();
       }
     };
-  }, [showEmergencyForm, showEmergencyDashboard, showHospitalSelection, showFinalConfirmation]);
+  }, [showEmergencyForm, showEmergencyDashboard, showHospitalSelection, showFinalConfirmation, showAccidentForm, showAccidentConfirmation, showAccidentHospitalSelection]);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
@@ -290,6 +303,15 @@ const HomeScreen = () => {
     setSelectedService(service);
     if (service === 'emergency') {
       setShowEmergencyModal(true);
+    } else if (service === 'accident') {
+      setShowAccidentForm(true);
+      setPanelPosition(height * 0.7);
+      Animated.spring(panelHeight, {
+        toValue: height * 0.7,
+        useNativeDriver: false,
+        tension: 100,
+        friction: 8,
+      }).start();
     }
     console.log('Selected service:', service);
   };
@@ -362,9 +384,9 @@ const HomeScreen = () => {
       setShowFinalConfirmation(true);
       
       // Pan down to show map with selected hospital
-      setPanelPosition(height * 0.38);
+      setPanelPosition(height * 0.45);
       Animated.spring(panelHeight, {
-        toValue: height * 0.38,
+        toValue: height * 0.45,
         useNativeDriver: false,
         tension: 100,
         friction: 8,
@@ -385,20 +407,145 @@ const HomeScreen = () => {
     // Route is already shown when hospital was selected
   };
 
-  const conditions = [
-    'Heart Attack', 'Stroke', 'Breathing Problems', 'Chest Pain', 
-    'Severe Injury', 'Unconscious', 'Severe Bleeding', 'Other'
-  ];
+
+
+  const handleAccidentSubmit = () => {
+    setShowAccidentForm(false);
+    setShowAccidentHospitalSelection(true);
+    
+    setPanelPosition(height * 0.5);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.5,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+    
+    // Find nearest trauma center for accidents
+    setTimeout(() => {
+      let nearestHospital;
+      
+      if (hospitalData.length > 0) {
+        // Prioritize trauma centers for accidents
+        const traumaCenters = hospitalData.filter(h => h.type?.toLowerCase().includes('trauma') || h.emergency_services);
+        const targetHospital = traumaCenters.length > 0 ? traumaCenters[0] : hospitalData[0];
+        
+        const distanceKm = parseFloat(targetHospital.distance);
+        const etaMinutes = Math.round((distanceKm / 35) * 60) + 5; // Slightly faster for accidents
+        const etaRange = `${etaMinutes}-${etaMinutes + 3}`;
+        
+        nearestHospital = {
+          name: targetHospital.name,
+          distance: targetHospital.distance,
+          eta: etaRange + ' min',
+          lat: targetHospital.latitude,
+          lng: targetHospital.longitude
+        };
+      } else {
+        nearestHospital = {
+          name: 'Trauma Center',
+          distance: 'Unknown',
+          eta: '8-12 min',
+          lat: userLocation.latitude + 0.01,
+          lng: userLocation.longitude + 0.01
+        };
+      }
+      
+      setSelectedHospital(nearestHospital);
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(JSON.stringify({
+          type: 'showEmergencyHospital',
+          hospital: nearestHospital
+        }));
+      }
+      setShowAccidentHospitalSelection(false);
+      setShowAccidentConfirmation(true);
+      
+      setPanelPosition(height * 0.45);
+      Animated.spring(panelHeight, {
+        toValue: height * 0.45,
+        useNativeDriver: false,
+        tension: 100,
+        friction: 8,
+      }).start();
+    }, 2000);
+  };
+
+  const handleAccidentConfirm = () => {
+    setShowAccidentConfirmation(false);
+    setShowEmergencyDashboard(true);
+    setPanelPosition(height * 0.5);
+    Animated.spring(panelHeight, {
+      toValue: height * 0.5,
+      useNativeDriver: false,
+      tension: 100,
+      friction: 8,
+    }).start();
+  };
+
+  // Booking confirmation handlers
+  const handleNormalBookingConfirm = () => {
+    const bookingData = {
+      hospital_id: bookingHospitalData?.id || 1,
+      pickup_location: address,
+      destination: bookingHospitalData?.name,
+      booking_type: 'Normal',
+      patient_name: userName,
+      patient_phone: '+91-9876543210' // Should come from user profile
+    };
+    
+    navigation.navigate('LiveTracking', { bookingData });
+  };
+
+  const handleEmergencyBookingConfirm = () => {
+    const bookingData = {
+      hospital_id: 1, // Use default hospital ID since selectedHospital doesn't have id
+      pickup_location: address,
+      destination: selectedHospital?.name,
+      booking_type: 'Emergency',
+      emergency_type: emergencyData.condition,
+      severity: emergencyData.severity,
+      patient_name: userName,
+      patient_phone: '+91-9876543210'
+    };
+    
+    navigation.navigate('LiveTracking', { bookingData });
+  };
+
+  const handleAccidentBookingConfirm = () => {
+    const bookingData = {
+      hospital_id: 1, // Use default hospital ID since selectedHospital doesn't have id
+      pickup_location: address,
+      destination: selectedHospital?.name,
+      booking_type: 'Accident',
+      severity: accidentData.injuriesVisible,
+      accident_details: {
+        type: accidentData.type,
+        peopleInvolved: accidentData.peopleInvolved,
+        injuriesVisible: accidentData.injuriesVisible,
+        policeRequired: accidentData.policeRequired,
+        towRequired: accidentData.towRequired
+      },
+      patient_name: userName,
+      patient_phone: '+91-9876543210'
+    };
+    
+    navigation.navigate('LiveTracking', { bookingData });
+  };
 
   const handleEmergencyCancel = () => {
     setShowEmergencyModal(false);
     setShowEmergencyForm(false);
     setShowEmergencyDashboard(false);
+    setShowAccidentForm(false);
     setShowHospitalSelection(false);
+    setShowAccidentHospitalSelection(false);
     setShowFinalConfirmation(false);
+    setShowAccidentConfirmation(false);
     setSelectedService(null);
     setSelectedHospital(null);
     setEmergencyData({ condition: '', severity: '', instructions: '' });
+    setAccidentData({ type: '', peopleInvolved: '', injuriesVisible: '', policeRequired: false, towRequired: false });
     
     // Return to initial panel height
     setPanelPosition(height * 0.5);
@@ -445,7 +592,11 @@ const HomeScreen = () => {
       if (keyboardHeight > 0) {
         // When keyboard is active, maintain raised position
         targetHeight = height - keyboardHeight + 50;
+      } else if (showAccidentConfirmation || showFinalConfirmation) {
+        // During confirmation, snap between 45% and 60%
+        targetHeight = currentHeight > height * 0.525 ? height * 0.6 : height * 0.45;
       } else {
+        // Normal behavior
         targetHeight = currentHeight > height * 0.6 ? height * 0.8 : height * 0.5;
       }
       
@@ -475,6 +626,14 @@ const HomeScreen = () => {
               <Text style={styles.spinnerText}>🏥</Text>
             </View>
             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Searching for the best available hospital</Text>
+          </View>
+        ) : showAccidentHospitalSelection ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.accidentLoadingTitle}>Finding Nearest Trauma Center...</Text>
+            <View style={styles.loadingSpinner}>
+              <Text style={styles.spinnerText}>🚛</Text>
+            </View>
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Locating trauma center and dispatching response team</Text>
           </View>
         ) : showFinalConfirmation ? (
           <View>
@@ -519,106 +678,93 @@ const HomeScreen = () => {
               }}>
                 <Text style={[styles.backToFormText, { color: colors.textSecondary }]}>‹ Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.finalConfirmButton} onPress={handleFinalConfirm}>
+              <TouchableOpacity style={styles.finalConfirmButton} onPress={handleEmergencyBookingConfirm}>
                 <Text style={styles.finalConfirmText}>🚨 BOOK AMBULANCE</Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : showEmergencyForm ? (
+          <EmergencyForm
+            emergencyData={emergencyData}
+            onDataChange={setEmergencyData}
+            showConditionDropdown={showConditionDropdown}
+            onDropdownToggle={setShowConditionDropdown}
+            onSubmit={handleEmergencySubmit}
+            onCancel={handleEmergencyCancel}
+            panelHeight={panelHeight}
+            height={height}
+          />
+        ) : showAccidentForm ? (
+          <AccidentForm
+            accidentData={accidentData}
+            onDataChange={setAccidentData}
+            showTypeDropdown={showTypeDropdown}
+            onDropdownToggle={setShowTypeDropdown}
+            onSubmit={handleAccidentSubmit}
+            onCancel={handleEmergencyCancel}
+            panelHeight={panelHeight}
+            height={height}
+          />
+        ) : showAccidentConfirmation ? (
           <View>
-            <View style={styles.emergencyHeader}>
-              <TouchableOpacity onPress={() => {
-                handleEmergencyCancel();
-              }} style={styles.backButton}>
-                <Text style={[styles.backIcon, { color: colors.text }]}>‹</Text>
-              </TouchableOpacity>
-              <Text style={styles.emergencyTitle}>Emergency Details</Text>
+            <View style={styles.confirmationHeader}>
+              <Text style={styles.accidentConfirmationTitle}>Confirm Accident Response</Text>
             </View>
             
-            <View style={styles.formContainer}>
-              <Text style={[styles.formLabel, { color: colors.text }]}>Severity Level *</Text>
-              <View style={styles.severityButtons}>
-                <TouchableOpacity 
-                  style={[styles.severityBtn, { backgroundColor: colors.surface, borderColor: colors.surface }, emergencyData.severity === 'Critical' && { backgroundColor: colors.background, borderColor: colors.primary }]}
-                  onPress={() => setEmergencyData({...emergencyData, severity: 'Critical'})}
-                >
-                  <Text style={[styles.severityText, { color: colors.textSecondary }, emergencyData.severity === 'Critical' && { color: colors.text }]}>Critical</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.severityBtn, { backgroundColor: colors.surface, borderColor: colors.surface }, emergencyData.severity === 'Urgent' && { backgroundColor: colors.background, borderColor: colors.primary }]}
-                  onPress={() => setEmergencyData({...emergencyData, severity: 'Urgent'})}
-                >
-                  <Text style={[styles.severityText, { color: colors.textSecondary }, emergencyData.severity === 'Urgent' && { color: colors.text }]}>Urgent</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.severityBtn, { backgroundColor: colors.surface, borderColor: colors.surface }, emergencyData.severity === 'Moderate' && { backgroundColor: colors.background, borderColor: colors.primary }]}
-                  onPress={() => setEmergencyData({...emergencyData, severity: 'Moderate'})}
-                >
-                  <Text style={[styles.severityText, { color: colors.textSecondary }, emergencyData.severity === 'Moderate' && { color: colors.text }]}>Moderate</Text>
-                </TouchableOpacity>
+            <View style={[styles.summaryContainer, { backgroundColor: colors.surface }]}>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Accident Type:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{accidentData.type}</Text>
               </View>
-              
-              <Text style={[styles.formLabel, { color: colors.text }]}>Visible Symptoms *</Text>
-              <View style={styles.dropdownContainer}>
-                <TouchableOpacity 
-                  style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]} 
-                  onPress={() => {
-                    const newDropdownState = !showConditionDropdown;
-                    setShowConditionDropdown(newDropdownState);
-                    
-                    if (newDropdownState) {
-                      // Expand panel fully when dropdown opens
-                      const targetHeight = height * 0.95;
-                      setPanelPosition(targetHeight);
-                      Animated.spring(panelHeight, {
-                        toValue: targetHeight,
-                        useNativeDriver: false,
-                        tension: 100,
-                        friction: 8,
-                      }).start();
-                    }
-                  }}
-                >
-                  <Text style={[styles.dropdownText, { color: colors.textSecondary }, emergencyData.condition && { color: colors.text, fontWeight: '600' }]}>
-                    {emergencyData.condition || 'Select symptoms...'}
-                  </Text>
-                  <Text style={[styles.dropdownArrow, { color: colors.textSecondary }]}>▼</Text>
-                </TouchableOpacity>
-                
-                {showConditionDropdown && (
-                  <View style={[styles.dropdownList, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    {conditions.map((condition, index) => (
-                      <TouchableOpacity 
-                        key={index}
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                          setEmergencyData({...emergencyData, condition});
-                          setShowConditionDropdown(false);
-                          
-                          // Normalize panel when option is selected
-                          const targetHeight = height * 0.6;
-                          setPanelPosition(targetHeight);
-                          Animated.spring(panelHeight, {
-                            toValue: targetHeight,
-                            useNativeDriver: false,
-                            tension: 100,
-                            friction: 8,
-                          }).start();
-                        }}
-                      >
-                        <Text style={[styles.dropdownItemText, { color: colors.text }]}>{condition}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>People Involved:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{accidentData.peopleInvolved}</Text>
               </View>
-              
-              <TouchableOpacity 
-                style={[styles.dispatchButton, (!emergencyData.condition || !emergencyData.severity) && { backgroundColor: '#666' }]} 
-                onPress={handleEmergencySubmit}
-                disabled={!emergencyData.condition || !emergencyData.severity}
-              >
-                <Text style={styles.dispatchText}>CONTINUE</Text>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Injuries:</Text>
+                <Text style={[styles.summaryValue, styles.accidentSeverityValue]}>{accidentData.injuriesVisible}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Hospital:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedHospital?.name}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Distance:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedHospital?.distance}</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>ETA:</Text>
+                <Text style={[styles.summaryValue, { color: colors.text }]}>{selectedHospital?.eta}</Text>
+              </View>
+              {(accidentData.policeRequired || accidentData.towRequired) && (
+                <View style={styles.additionalServices}>
+                  <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Additional Services:</Text>
+                  {accidentData.policeRequired && (
+                    <Text style={[styles.serviceItem, { color: colors.text }]}>• Police Dispatch</Text>
+                  )}
+                  {accidentData.towRequired && (
+                    <Text style={[styles.serviceItem, { color: colors.text }]}>• Tow Service</Text>
+                  )}
+                </View>
+              )}
+            </View>
+            
+            <View style={styles.finalButtons}>
+              <TouchableOpacity style={[styles.backToFormButton, { backgroundColor: colors.surface }]} onPress={() => {
+                setShowAccidentConfirmation(false);
+                setShowAccidentForm(true);
+                setPanelPosition(height * 0.7);
+                Animated.spring(panelHeight, {
+                  toValue: height * 0.7,
+                  useNativeDriver: false,
+                  tension: 100,
+                  friction: 8,
+                }).start();
+              }}>
+                <Text style={[styles.backToFormText, { color: colors.textSecondary }]}>‹ Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.accidentConfirmButton} onPress={handleAccidentBookingConfirm}>
+                <Text style={styles.accidentConfirmText}>🚛 DISPATCH RESPONSE</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -635,8 +781,8 @@ const HomeScreen = () => {
             
             <View style={[styles.hospitalInfo, { backgroundColor: colors.surface }]}>
               <Text style={[styles.hospitalLabel, { color: colors.textSecondary }]}>Dispatched to:</Text>
-              <Text style={[styles.hospitalName, { color: colors.text }]}>City General Hospital</Text>
-              <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>2.3 km away</Text>
+              <Text style={[styles.hospitalName, { color: colors.text }]}>{selectedHospital?.name || 'City General Hospital'}</Text>
+              <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>{selectedHospital?.distance || '2.3'} km away</Text>
             </View>
             
             <View style={styles.ambulanceStatus}>
@@ -645,12 +791,8 @@ const HomeScreen = () => {
                 <Text style={styles.etaText}>{ambulanceETA}</Text>
               </View>
               <View style={styles.statusRow}>
-                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Driver:</Text>
-                <Text style={[styles.driverText, { color: colors.text }]}>Rajesh Kumar</Text>
-              </View>
-              <View style={styles.statusRow}>
-                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Vehicle:</Text>
-                <Text style={[styles.vehicleText, { color: colors.text }]}>DL-01-AB-1234</Text>
+                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Status:</Text>
+                <Text style={[styles.driverText, { color: colors.text }]}>Ambulance Dispatched</Text>
               </View>
             </View>
             
@@ -687,17 +829,14 @@ const HomeScreen = () => {
                 <Text style={[styles.ambulanceLabel, { color: colors.textSecondary }]}>ETA</Text>
                 <Text style={[styles.ambulanceValue, { color: colors.text }]}>8-12 min</Text>
               </View>
-              <View style={styles.ambulanceRow}>
-                <Text style={[styles.ambulanceLabel, { color: colors.textSecondary }]}>Driver</Text>
-                <Text style={[styles.ambulanceValue, { color: colors.text }]}>Rajesh Kumar</Text>
-              </View>
+
             </View>
             
             <View style={styles.bookingButtonContainer}>
               <TouchableOpacity style={[styles.cancelButton, { borderColor: colors.border }]} onPress={handleBookingCancel}>
                 <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmButton, { backgroundColor: '#fff' }]}>
+              <TouchableOpacity style={[styles.confirmButton, { backgroundColor: '#fff' }]} onPress={handleNormalBookingConfirm}>
                 <Text style={[styles.confirmButtonText, { color: '#000' }]}>Confirm Booking</Text>
               </TouchableOpacity>
             </View>
@@ -706,85 +845,26 @@ const HomeScreen = () => {
           <View>
             <Text style={[styles.panelTitle, { color: colors.text }]}>Find Hospitals</Text>
             
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={[styles.searchInput, { backgroundColor: colors.surface, color: colors.text }]}
-                placeholder="Search hospitals nearby..."
-                placeholderTextColor={colors.textSecondary}
-                value={hospitalSearch}
-                onChangeText={handleHospitalSearch}
-              />
-              <TouchableOpacity 
-                style={[styles.radiusSelector, { backgroundColor: colors.surface }]}
-                onPress={() => setShowRadiusControl(!showRadiusControl)}
-              >
-                <Text style={[styles.radiusText, { color: colors.text }]}>{searchRadius}km</Text>
-                <Text style={[styles.radiusArrow, { color: colors.textSecondary }]}>▼</Text>
-              </TouchableOpacity>
-            </View>
+            <HospitalSearch
+              searchText={hospitalSearch}
+              onSearchChange={handleHospitalSearch}
+              searchRadius={searchRadius}
+              onRadiusPress={() => setShowRadiusControl(!showRadiusControl)}
+              showRadiusControl={showRadiusControl}
+              onRadiusChange={(radius) => {
+                handleRadiusChange(radius);
+                setShowRadiusControl(false);
+              }}
+            />
             
-            {/* Radius Options */}
-            {showRadiusControl && (
-              <View style={styles.radiusOptions}>
-                {[2, 5, 10, 15, 20].map((radius) => (
-                  <TouchableOpacity
-                    key={radius}
-                    style={[styles.radiusOption, { backgroundColor: searchRadius === radius ? colors.primary : colors.surface }, searchRadius === radius && styles.selectedRadiusOption]}
-                    onPress={() => {
-                      handleRadiusChange(radius);
-                      setShowRadiusControl(false);
-                    }}
-                  >
-                    <Text style={[styles.radiusOptionText, { color: searchRadius === radius ? (isDarkMode ? colors.background : '#fff') : colors.textSecondary }, searchRadius === radius && styles.selectedRadiusOptionText]}>
-                      {radius}km
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+            <EmergencyButtons onServiceSelect={handleServiceSelect} />
             
-            {/* Emergency Services */}
-            <View style={styles.emergencyButtons}>
-              <TouchableOpacity 
-                style={[styles.emergencyBtn, { backgroundColor: colors.primary }]}
-                onPress={() => handleServiceSelect('emergency')}
-              >
-                <Text style={[styles.emergencyBtnText, { color: '#fff' }]}>🚨 Emergency</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.emergencyBtn, { backgroundColor: colors.primary }]}
-                onPress={() => handleServiceSelect('accident')}
-              >
-                <Text style={[styles.emergencyBtnText, { color: '#fff' }]}>🚑 Accident</Text>
-              </TouchableOpacity>
-            </View>
-            
-            {/* Hospital List */}
-            <ScrollView style={styles.hospitalList} showsVerticalScrollIndicator={false}>
-              {filteredHospitals.length > 0 ? (
-                filteredHospitals.map((hospital, index) => (
-                  <TouchableOpacity 
-                    key={hospital.id || index} 
-                    style={[
-                      styles.hospitalItem,
-                      { backgroundColor: colors.background, borderColor: colors.border },
-                      selectedHospitalForBooking?.id === hospital.id && { borderColor: colors.primary, backgroundColor: colors.surface }
-                    ]}
-                    onPress={() => handleHospitalSelect(hospital)}
-                  >
-                    <View style={styles.hospitalHeader}>
-                      <Text style={[styles.hospitalName, { color: colors.text }]}>{hospital.name}</Text>
-                      <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>{hospital.distance} km</Text>
-                    </View>
-                    <Text style={[styles.hospitalType, { color: '#007AFF' }]}>{hospital.type}</Text>
-                    <Text style={[styles.hospitalServices, { color: colors.textSecondary }]}>Emergency: {hospital.emergency_services ? 'Available' : 'Not Available'}</Text>
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <Text style={[styles.noHospitalsText, { color: colors.textSecondary }]}>No hospitals found in {searchRadius}km radius</Text>
-              )}
-            </ScrollView>
+            <HospitalList
+              hospitals={filteredHospitals}
+              selectedHospitalId={selectedHospitalForBooking?.id}
+              searchRadius={searchRadius}
+              onHospitalSelect={handleHospitalSelect}
+            />
           </View>
         )}
       </ScrollView>
@@ -801,15 +881,18 @@ const HomeScreen = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
-      {/* Emergency Header Bar */}
+      {/* Emergency/Accident Header Bar */}
       {(showEmergencyForm || showEmergencyDashboard || showHospitalSelection || showFinalConfirmation) && (
         <Animated.View style={[styles.emergencyHeaderBar, { opacity: emergencyPulse }]} />
+      )}
+      {(showAccidentForm || showAccidentConfirmation || showAccidentHospitalSelection) && (
+        <Animated.View style={[styles.accidentHeaderBar, { opacity: emergencyPulse }]} />
       )}
       
       <MapViewComponent 
         webViewRef={webViewRef} 
         userLocation={userLocation}
-        mapMode={showEmergencyDashboard || showFinalConfirmation ? 'emergency' : 'normal'}
+        mapMode={showEmergencyDashboard || showFinalConfirmation || showAccidentConfirmation ? 'emergency' : 'normal'}
         selectedHospital={selectedHospital}
         hospitalData={hospitalData}
         ambulanceData={ambulanceData}
@@ -831,7 +914,7 @@ const HomeScreen = () => {
       
       {/* Floating Slide to Book - Only on initial hospital list page */}
       {selectedHospitalForBooking && !showBookingConfirmation && 
-       !showEmergencyForm && !showEmergencyDashboard && !showHospitalSelection && !showFinalConfirmation && (
+       !showEmergencyForm && !showEmergencyDashboard && !showAccidentForm && !showHospitalSelection && !showFinalConfirmation && !showAccidentConfirmation && !showAccidentHospitalSelection && (
         <SlideToBook 
           hospitalName={selectedHospitalForBooking.name}
           onSlideComplete={handleSlideToBookComplete}
@@ -943,246 +1026,7 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
   },
-  searchContainer: {
-    marginBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  searchInput: {
-    flex: 1,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  radiusSelector: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 60,
-  },
-  radiusText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  radiusArrow: {
-    fontSize: 10,
-    color: '#666',
-  },
-  radiusOptions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  radiusOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#f8f8f8',
-    alignItems: 'center',
-  },
-  selectedRadiusOption: {
-    backgroundColor: '#000',
-  },
-  radiusOptionText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#666',
-  },
-  selectedRadiusOptionText: {
-    color: '#fff',
-  },
-  hospitalList: {
-    flex: 1,
-    paddingVertical: 8,
-  },
-  hospitalItem: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-    marginBottom: 12,
-  },
-  selectedHospitalItem: {
-    borderColor: '#000',
-    borderWidth: 2,
-    backgroundColor: '#f8f8f8',
-  },
-  hospitalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  hospitalDistance: {
-    fontSize: 14,
-    color: '#666',
-  },
-  hospitalType: {
-    fontSize: 12,
-    color: '#007AFF',
-    textTransform: 'capitalize',
-    marginTop: 2,
-  },
-  hospitalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  hospitalServices: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
 
-  emergencyButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  emergencyBtn: {
-    flex: 1,
-    backgroundColor: '#000',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  emergencyBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  noHospitalsText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 20,
-  },
-
-
-
-  // Emergency Form
-  emergencyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  emergencyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ff0000',
-  },
-  formContainer: {
-    gap: 16,
-  },
-  formLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 8,
-  },
-  dropdown: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dropdownText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  selectedText: {
-    color: '#000',
-    fontWeight: '600',
-  },
-  dropdownContainer: {
-    position: 'relative',
-    zIndex: 1,
-    marginBottom: 20,
-  },
-  dropdownArrow: {
-    fontSize: 12,
-    color: '#666',
-  },
-  dropdownList: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginTop: 4,
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  dropdownItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  dropdownItemText: {
-    fontSize: 16,
-    color: '#000',
-  },
-  selectedSeverity: {
-    backgroundColor: '#fff',
-    borderColor: '#000',
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  severityButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  severityBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    borderWidth: 2,
-    borderColor: '#f8f8f8',
-  },
-  severityText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  selectedSeverityText: {
-    color: '#000',
-  },
-  dispatchButton: {
-    backgroundColor: '#ff0000',
-    borderRadius: 8,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  dispatchText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-  },
 
   // Emergency Dashboard
   dashboardHeader: {
@@ -1210,6 +1054,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
+  },
+  hospitalName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
+  },
+  hospitalDistance: {
+    fontSize: 14,
+    color: '#666',
   },
   ambulanceStatus: {
     backgroundColor: '#e8f5e8',
@@ -1279,6 +1133,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#ff0000',
+    marginBottom: 20,
+  },
+  accidentLoadingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ff6600',
     marginBottom: 20,
   },
   loadingSpinner: {
@@ -1354,6 +1214,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   finalConfirmText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  accidentConfirmationTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ff6600',
+    textAlign: 'center',
+  },
+  accidentSeverityValue: {
+    color: '#ff6600',
+  },
+  additionalServices: {
+    marginTop: 8,
+  },
+  serviceItem: {
+    fontSize: 14,
+    marginLeft: 8,
+    marginTop: 4,
+  },
+  accidentConfirmButton: {
+    flex: 2,
+    backgroundColor: '#ff6600',
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  accidentConfirmText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',
@@ -1446,6 +1335,14 @@ const styles = StyleSheet.create({
   // Emergency Header Bar
   emergencyHeaderBar: {
     backgroundColor: '#ff0000',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  // Accident Header Bar
+  accidentHeaderBar: {
+    backgroundColor: '#ff6600',
     paddingVertical: 16,
     paddingHorizontal: 16,
     alignItems: 'center',
