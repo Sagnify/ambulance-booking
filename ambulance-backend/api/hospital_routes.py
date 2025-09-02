@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from .models import Hospital, db
+from .models import Hospital, Driver, db
 from sqlalchemy import func
 
 hospital_bp = Blueprint('hospital', __name__)
@@ -129,16 +129,45 @@ def seed_hospitals():
         ]
         
         # Add hospitals to database
-        for hospital_data in hospitals_data:
+        for i, hospital_data in enumerate(hospitals_data):
+            hospital_data['hospital_id'] = f'hospital{i+1:02d}'
+            hospital_data['password'] = 'admin'
             hospital = Hospital(**hospital_data)
             db.session.add(hospital)
         
         db.session.commit()
         
+        # Add sample drivers for each hospital
+        sample_drivers = [
+            {'name': 'Rajesh Kumar', 'phone': '+91-9876543210', 'vehicle': 'WB-01-AB-1234'},
+            {'name': 'Amit Singh', 'phone': '+91-9876543211', 'vehicle': 'WB-01-AB-1235'},
+            {'name': 'Suresh Das', 'phone': '+91-9876543212', 'vehicle': 'WB-01-AB-1236'}
+        ]
+        
+        hospitals = Hospital.query.all()
+        for i, hospital in enumerate(hospitals):
+            # Add 2-3 drivers per hospital
+            for j in range(min(3, hospital.ambulance_count)):
+                driver_data = sample_drivers[j % len(sample_drivers)]
+                driver = Driver(
+                    name=f"{driver_data['name']} {i+1}-{j+1}",
+                    phone_number=driver_data['phone'].replace('210', f"{210+i*10+j}"),
+                    vehicle_number=driver_data['vehicle'].replace('1234', f"{1234+i*10+j}"),
+                    hospital_id=hospital.id,
+                    status='Available',
+                    driver_id=f"driver{i+1}{j+1:02d}",
+                    password='driver123'
+                )
+                db.session.add(driver)
+        
+        db.session.commit()
+        
+        driver_count = Driver.query.count()
         return jsonify({
             'success': True,
-            'message': f'Successfully added {len(hospitals_data)} Kolkata hospitals to database',
-            'hospitals_added': len(hospitals_data)
+            'message': f'Successfully added {len(hospitals_data)} hospitals and {driver_count} drivers to database',
+            'hospitals_added': len(hospitals_data),
+            'drivers_added': driver_count
         }), 201
         
     except Exception as e:

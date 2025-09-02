@@ -6,13 +6,28 @@ import { useTheme } from '../../context/ThemeContext';
 interface MapViewProps {
   webViewRef: React.RefObject<any>;
   userLocation: { latitude: number; longitude: number };
-  mapMode: 'normal' | 'emergency';
+  mapMode?: 'normal' | 'emergency';
   selectedHospital?: { name: string; distance: string; eta: string; lat?: number; lng?: number } | null;
   hospitalData?: any[];
   ambulanceData?: any[];
+  hospitalLocation?: { latitude: number; longitude: number };
+  ambulanceLocation?: { latitude: number; longitude: number };
+  showHospitalMarker?: boolean;
+  showAmbulanceMarker?: boolean;
 }
 
-const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, mapMode, selectedHospital = null, hospitalData = [], ambulanceData = [] }) => {
+const MapViewComponent: React.FC<MapViewProps> = ({ 
+  webViewRef, 
+  userLocation, 
+  mapMode = 'normal', 
+  selectedHospital = null, 
+  hospitalData = [], 
+  ambulanceData = [],
+  hospitalLocation = null,
+  ambulanceLocation = null,
+  showHospitalMarker = false,
+  showAmbulanceMarker = false
+}) => {
   const { isDarkMode } = useTheme();
   return (
     <View style={styles.mapContainer}>
@@ -45,6 +60,11 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, ma
                 // Use only API data
                 var apiHospitals = ${JSON.stringify(hospitalData)};
                 var apiAmbulances = ${JSON.stringify(ambulanceData)};
+                var hospitalLocation = ${JSON.stringify(hospitalLocation)};
+                var ambulanceLocation = ${JSON.stringify(ambulanceLocation)};
+                var showHospitalMarker = ${showHospitalMarker};
+                var showAmbulanceMarker = ${showAmbulanceMarker};
+                
                 var nearbyHospitals = (apiHospitals && apiHospitals.length > 0) ? apiHospitals.map(h => ({
                   id: h.id,
                   lat: h.latitude,
@@ -216,15 +236,48 @@ const MapViewComponent: React.FC<MapViewProps> = ({ webViewRef, userLocation, ma
                   });
                 }
                 
+                // Add specific hospital marker if provided
+                var specificHospitalMarker = null;
+                if (showHospitalMarker && hospitalLocation) {
+                  specificHospitalMarker = L.marker([hospitalLocation.latitude, hospitalLocation.longitude], {
+                    icon: L.divIcon({
+                      html: '<div style="background: #007AFF; border: 3px solid white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 12px rgba(0,123,255,0.5);">🏥</div>',
+                      iconSize: [40, 40],
+                      className: 'selected-hospital-marker'
+                    })
+                  }).addTo(map);
+                }
+                
+                // Add specific ambulance marker if provided
+                var specificAmbulanceMarker = null;
+                if (showAmbulanceMarker && ambulanceLocation) {
+                  specificAmbulanceMarker = L.marker([ambulanceLocation.latitude, ambulanceLocation.longitude], {
+                    icon: L.divIcon({
+                      html: '<div style="background: #00AA00; border: 3px solid white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 4px 12px rgba(0,170,0,0.5); animation: pulse 2s infinite;">🚑</div><style>@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }</style>',
+                      iconSize: [40, 40],
+                      className: 'active-ambulance-marker'
+                    })
+                  }).addTo(map);
+                }
+                
                 // Initialize based on mode
                 if ('${mapMode}' === 'normal') {
-                  showNormalHospitals();
-                  // Auto-fit all markers on initial load in upper half
+                  if (!showHospitalMarker && !showAmbulanceMarker) {
+                    showNormalHospitals();
+                  }
+                  
+                  // Auto-fit all markers in upper half
                   setTimeout(function() {
-                    var allMarkers = [userMarker].concat(hospitalMarkers).concat(ambulanceMarkers);
+                    var allMarkers = [userMarker];
+                    if (specificHospitalMarker) allMarkers.push(specificHospitalMarker);
+                    if (specificAmbulanceMarker) allMarkers.push(specificAmbulanceMarker);
+                    if (!showHospitalMarker && !showAmbulanceMarker) {
+                      allMarkers = allMarkers.concat(hospitalMarkers).concat(ambulanceMarkers);
+                    }
+                    
                     if (allMarkers.length > 1) {
                       var group = new L.featureGroup(allMarkers);
-                      var bounds = group.getBounds().pad(0.8);
+                      var bounds = group.getBounds().pad(0.7);
                       map.fitBounds(bounds);
                     }
                   }, 500);

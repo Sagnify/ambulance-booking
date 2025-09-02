@@ -356,6 +356,7 @@ const HomeScreen = () => {
         const etaRange = `${etaMinutes}-${etaMinutes + 4}`;
         
         nearestHospital = {
+          id: apiHospital.id,
           name: apiHospital.name,
           distance: apiHospital.distance,
           eta: etaRange + ' min',
@@ -365,6 +366,7 @@ const HomeScreen = () => {
       } else {
         // Fallback if no API data
         nearestHospital = {
+          id: 1,
           name: 'Emergency Services',
           distance: 'Unknown',
           eta: '10-15 min',
@@ -435,6 +437,7 @@ const HomeScreen = () => {
         const etaRange = `${etaMinutes}-${etaMinutes + 3}`;
         
         nearestHospital = {
+          id: targetHospital.id,
           name: targetHospital.name,
           distance: targetHospital.distance,
           eta: etaRange + ' min',
@@ -443,6 +446,7 @@ const HomeScreen = () => {
         };
       } else {
         nearestHospital = {
+          id: 1,
           name: 'Trauma Center',
           distance: 'Unknown',
           eta: '8-12 min',
@@ -499,7 +503,7 @@ const HomeScreen = () => {
 
   const handleEmergencyBookingConfirm = () => {
     const bookingData = {
-      hospital_id: 1, // Use default hospital ID since selectedHospital doesn't have id
+      hospital_id: selectedHospital?.id || 1,
       pickup_location: address,
       destination: selectedHospital?.name,
       booking_type: 'Emergency',
@@ -514,7 +518,7 @@ const HomeScreen = () => {
 
   const handleAccidentBookingConfirm = () => {
     const bookingData = {
-      hospital_id: 1, // Use default hospital ID since selectedHospital doesn't have id
+      hospital_id: selectedHospital?.id || 1,
       pickup_location: address,
       destination: selectedHospital?.name,
       booking_type: 'Accident',

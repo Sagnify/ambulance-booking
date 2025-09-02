@@ -28,15 +28,18 @@ def create_app(config_name=None):
     from .otp_routes import otp_bp
     from .auth_routes import auth_bp
     from .health_routes import health_bp
-    from .hospital_routes import hospital_bp
+    try:
+        from .hospital_routes import hospital_bp
+        app.register_blueprint(hospital_bp)
+    except ImportError:
+        pass
     app.register_blueprint(otp_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(health_bp)
-    app.register_blueprint(hospital_bp)
 
     @app.route('/')
     def api_list():
-        from .models import Hospital
+        from .models import Hospital, Driver
         
         # Get hospital count
         try:
