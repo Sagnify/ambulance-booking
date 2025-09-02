@@ -17,20 +17,25 @@ import MapViewComponent from '../components/MapView';
 import { useTheme } from '../../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
-const API_BASE_URL = 'https://ambulance-booking-roan.vercel.app/api';
+const API_BASE_URL = 'https://ambulance-booking-roan.vercel.app';
 
 const LiveTrackingScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
-  const { bookingData } = route.params;
+  const { bookingData } = route.params as { bookingData: any };
   const { colors } = useTheme();
   const webViewRef = useRef(null);
   
-  const [booking, setBooking] = useState(null);
+  const [booking, setBooking] = useState<{ booking_id: number } | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [isAssigned, setIsAssigned] = useState(false);
-  const [ambulanceLocation, setAmbulanceLocation] = useState(null);
-  const [assignedDriver, setAssignedDriver] = useState(null);
+  const [ambulanceLocation, setAmbulanceLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  interface Driver {
+    driver_name?: string;
+    vehicle_number?: string;
+    // add other fields as needed
+  }
+  const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
   const [userLocation] = useState({ latitude: 22.4675, longitude: 88.3732 });
   const [hospitalLocation] = useState({ latitude: 22.4775, longitude: 88.3832 });
   const panelHeight = useRef(new Animated.Value(height * 0.4)).current;
@@ -68,7 +73,7 @@ const LiveTrackingScreen = () => {
     console.log('Creating booking with data:', bookingData);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/bookings`, {
+      const response = await fetch(`${API_BASE_URL}/api/bookings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -89,7 +94,7 @@ const LiveTrackingScreen = () => {
       }
     } catch (error) {
       console.error('Booking creation failed:', error);
-      Alert.alert('Error', 'Backend not available. Please try again later.');
+      Alert.alert('Error', 'Booking failed. Backend issue.');
     }
   };
 
@@ -97,7 +102,7 @@ const LiveTrackingScreen = () => {
     if (!booking) return;
     
     try {
-      const response = await fetch(`${API_BASE_URL}/bookings/${booking.booking_id}/status`);
+      const response = await fetch(`${API_BASE_URL}/api/bookings/${booking.booking_id}/status`);
       if (response.ok) {
         const result = await response.json();
         
@@ -119,7 +124,7 @@ const LiveTrackingScreen = () => {
     if (!booking || isAssigned) return;
     
     try {
-      const response = await fetch(`${API_BASE_URL}/bookings/${booking.booking_id}/auto-assign`, {
+      const response = await fetch(`${API_BASE_URL}/api/bookings/${booking.booking_id}/auto-assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -152,14 +157,27 @@ const LiveTrackingScreen = () => {
     }
   };
 
-  const onPanGestureEvent = (event) => {
+  interface PanGestureEvent {
+    nativeEvent: {
+      translationY: number;
+    };
+  }
+
+  const onPanGestureEvent = (event: PanGestureEvent) => {
     const { translationY } = event.nativeEvent;
     const maxHeight = height * 0.8;
     const newHeight = Math.max(height * 0.4, Math.min(maxHeight, panelPosition - translationY));
     panelHeight.setValue(newHeight);
   };
 
-  const onPanHandlerStateChange = (event) => {
+  interface PanHandlerStateChangeEvent {
+    nativeEvent: {
+      oldState: number;
+      translationY: number;
+    };
+  }
+
+  const onPanHandlerStateChange = (event: PanHandlerStateChangeEvent) => {
     if (event.nativeEvent.oldState === 4) {
       const { translationY } = event.nativeEvent;
       const currentHeight = panelPosition - translationY;
@@ -279,7 +297,7 @@ const LiveTrackingScreen = () => {
           webViewRef={webViewRef} 
           userLocation={userLocation}
           hospitalLocation={hospitalLocation}
-          ambulanceLocation={ambulanceLocation}
+          ambulanceLocation={ambulanceLocation ?? undefined}
           showHospitalMarker={true}
           showAmbulanceMarker={isAssigned}
         />
