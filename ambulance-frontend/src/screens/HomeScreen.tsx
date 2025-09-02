@@ -75,7 +75,7 @@ const HomeScreen = () => {
   const [showAccidentHospitalSelection, setShowAccidentHospitalSelection] = useState(false);
   const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
   const [showAccidentConfirmation, setShowAccidentConfirmation] = useState(false);
-  const [selectedHospital, setSelectedHospital] = useState<{name: string, distance: string, eta: string, lat: number, lng: number} | null>(null);
+  const [selectedHospital, setSelectedHospital] = useState<{id: number, name: string, distance: string, eta: string, lat: number, lng: number} | null>(null);
   const [ambulanceETA, setAmbulanceETA] = useState('8-12 min');
   const [hospitalData, setHospitalData] = useState<any[]>([]);
   const [ambulanceData, setAmbulanceData] = useState<any[]>([]);
