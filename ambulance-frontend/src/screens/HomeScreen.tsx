@@ -51,6 +51,7 @@ const HomeScreen = () => {
   const [filteredHospitals, setFilteredHospitals] = useState<any[]>([]);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [userName, setUserName] = useState('User');
+  const [userPhone, setUserPhone] = useState('+91-9876543210');
   const [cachedLocation, setCachedLocation] = useState<{latitude: number, longitude: number, timestamp: number} | null>(null);
   const webViewRef = useRef<any>(null);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
@@ -225,6 +226,9 @@ const HomeScreen = () => {
         });
         if (response.data.name) {
           setUserName(response.data.name || 'User');
+        }
+        if (response.data.phone_number) {
+          setUserPhone(response.data.phone_number);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -497,7 +501,7 @@ const HomeScreen = () => {
       destination: bookingHospitalData?.name,
       booking_type: 'Normal',
       patient_name: userName,
-      patient_phone: '+91-9876543210' // Should come from user profile
+      patient_phone: userPhone
     };
     
     navigation.navigate('LiveTracking', { bookingData });
@@ -514,7 +518,7 @@ const HomeScreen = () => {
       emergency_type: emergencyData.condition,
       severity: emergencyData.severity,
       patient_name: userName,
-      patient_phone: '+91-9876543210'
+      patient_phone: userPhone
     };
     
     navigation.navigate('LiveTracking', { bookingData });
@@ -537,7 +541,7 @@ const HomeScreen = () => {
         towRequired: accidentData.towRequired
       },
       patient_name: userName,
-      patient_phone: '+91-9876543210'
+      patient_phone: userPhone
     };
     
     navigation.navigate('LiveTracking', { bookingData });
