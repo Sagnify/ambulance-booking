@@ -126,8 +126,8 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('API Response:', response.data);
 
       if (response.status === 200) {
-        const { user_id, token } = response.data;
-        await setUserData(user_id.toString(), token);
+        const { user_id, token, name } = response.data;
+        await setUserData(user_id.toString(), token, name);
         console.log("Login successful, redirecting to home page...");
       }
     } catch (error: any) {

@@ -8,7 +8,8 @@ interface AuthContextType {
   logout: () => void;
   userId: string | null;
   userToken: string | null;
-  setUserData: (userId: string, token: string) => void;
+  userName: string | null;
+  setUserData: (userId: string, token: string, name?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -18,14 +19,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [userToken, setUserToken] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     const loadLoginState = async () => {
       try {
-        const [storedLoginState, storedUserId, storedToken] = await Promise.all([
+        const [storedLoginState, storedUserId, storedToken, storedUserName] = await Promise.all([
           AsyncStorage.getItem('userLoggedIn'),
           AsyncStorage.getItem('userId'),
-          AsyncStorage.getItem('userToken')
+          AsyncStorage.getItem('userToken'),
+          AsyncStorage.getItem('userName')
         ]);
         
         if (storedLoginState !== null) {
@@ -36,6 +39,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         if (storedToken !== null) {
           setUserToken(storedToken);
+        }
+        if (storedUserName !== null) {
+          setUserName(storedUserName);
         }
       } catch (error) {
         console.error('Error loading login state:', error);
@@ -55,15 +61,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const setUserData = async (userId: string, token: string) => {
+  const setUserData = async (userId: string, token: string, name?: string) => {
     try {
-      await Promise.all([
+      const promises = [
         AsyncStorage.setItem('userId', userId),
         AsyncStorage.setItem('userToken', token),
         AsyncStorage.setItem('userLoggedIn', JSON.stringify(true))
-      ]);
+      ];
+      
+      if (name) {
+        promises.push(AsyncStorage.setItem('userName', name));
+      }
+      
+      await Promise.all(promises);
       setUserId(userId);
       setUserToken(token);
+      if (name) setUserName(name);
       setUserLoggedInState(true);
     } catch (error) {
       console.error('Error saving user data:', error);
@@ -74,18 +87,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await Promise.all([
         AsyncStorage.removeItem('userLoggedIn'),
         AsyncStorage.removeItem('userId'),
-        AsyncStorage.removeItem('userToken')
+        AsyncStorage.removeItem('userToken'),
+        AsyncStorage.removeItem('userName')
       ]);
       setUserLoggedInState(false);
       setUserId(null);
       setUserToken(null);
+      setUserName(null);
     } catch (error) {
       console.error('Error during logout:', error);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ userLoggedIn, setUserLoggedIn, loading, logout, userId, userToken, setUserData }}>
+    <AuthContext.Provider value={{ userLoggedIn, setUserLoggedIn, loading, logout, userId, userToken, userName, setUserData }}>
       {children}
     </AuthContext.Provider>
   );

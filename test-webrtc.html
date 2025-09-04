@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background-color: #d4edda; }
+        .fail { background-color: #f8d7da; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>WebRTC Signaling Test</h1>
+    
+    <button onclick="testSignalingEndpoints()">Test Signaling Endpoints</button>
+    <button onclick="testWebRTCConnection()">Test WebRTC Connection</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = 'https://ambulance-booking-roan.vercel.app';
+        const results = document.getElementById('results');
+
+        function addResult(test, success, message) {
+            const div = document.createElement('div');
+            div.className = `test ${success ? 'pass' : 'fail'}`;
+            div.innerHTML = `<strong>${test}:</strong> ${success ? 'PASS' : 'FAIL'} - ${message}`;
+            results.appendChild(div);
+        }
+
+        async function testSignalingEndpoints() {
+            results.innerHTML = '<h3>Testing Signaling Endpoints...</h3>';
+            
+            const testPeerId = 'test_user_' + Date.now();
+            
+            // Test 1: Register peer
+            try {
+                const response = await fetch(`${API_BASE}/api/webrtc/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        peer_id: testPeerId,
+                        peer_type: 'user'
+                    })
+                });
+                
+                if (response.ok) {
+                    addResult('Peer Registration', true, 'Successfully registered peer');
+                } else {
+                    addResult('Peer Registration', false, `HTTP ${response.status}`);
+                }
+            } catch (error) {
+                addResult('Peer Registration', false, error.message);
+            }
+
+            // Test 2: Get messages
+            try {
+                const response = await fetch(`${API_BASE}/api/webrtc/messages/${testPeerId}`);
+                const data = await response.json();
+                
+                if (response.ok && Array.isArray(data.messages)) {
+                    addResult('Message Polling', true, `Got ${data.messages.length} messages`);
+                } else {
+                    addResult('Message Polling', false, 'Invalid response format');
+                }
+            } catch (error) {
+                addResult('Message Polling', false, error.message);
+            }
+
+            // Test 3: Heartbeat
+            try {
+                const response = await fetch(`${API_BASE}/api/webrtc/heartbeat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ peer_id: testPeerId })
+                });
+                
+                if (response.ok) {
+                    addResult('Heartbeat', true, 'Heartbeat successful');
+                } else {
+                    addResult('Heartbeat', false, `HTTP ${response.status}`);
+                }
+            } catch (error) {
+                addResult('Heartbeat', false, error.message);
+            }
+        }
+
+        async function testWebRTCConnection() {
+            results.innerHTML = '<h3>Testing WebRTC Connection...</h3>';
+            
+            try {
+                // Test WebRTC support
+                if (!window.RTCPeerConnection) {
+                    addResult('WebRTC Support', false, 'RTCPeerConnection not supported');
+                    return;
+                }
+                addResult('WebRTC Support', true, 'RTCPeerConnection available');
+
+                // Create peer connection
+                const pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' }
+                    ]
+                });
+                addResult('Peer Connection', true, 'RTCPeerConnection created');
+
+                // Create data channel
+                const dataChannel = pc.createDataChannel('test', { ordered: true });
+                addResult('Data Channel', true, 'Data channel created');
+
+                // Test offer creation
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                addResult('Offer Creation', true, 'SDP offer created successfully');
+
+                // Clean up
+                pc.close();
+                addResult('Cleanup', true, 'Connection closed');
+
+            } catch (error) {
+                addResult('WebRTC Test', false, error.message);
+            }
+        }
+
+        // Auto-run tests on load
+        window.onload = () => {
+            setTimeout(testSignalingEndpoints, 1000);
+        };
+    </script>
+</body>
+</html>

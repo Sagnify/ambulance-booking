@@ -20,10 +20,14 @@ from api import create_app
 from api.extensions import db
 from flask_cors import CORS
 from flask import render_template, request
+from api.webrtc_signaling import webrtc_bp
 
 # Create app via factory
 app = create_app()
 CORS(app)
+
+# Register WebRTC signaling blueprint
+app.register_blueprint(webrtc_bp, url_prefix='/api')
 
 
 
@@ -69,6 +73,10 @@ def dashboard():
 @app.route('/dashboard/login')
 def dashboard_login():
     return render_template('login.html')
+
+@app.route('/webrtc-dashboard')
+def webrtc_dashboard():
+    return render_template('webrtc-hospital.html')
 
 # Hospital Login API
 @app.route('/api/hospital/login', methods=['POST'])
@@ -624,6 +632,37 @@ def set_driver_availability():
     db.session.commit()
     
     return jsonify({"message": "Availability updated successfully"})
+
+@app.route('/api/users/<int:user_id>')
+def get_user(user_id):
+    from flask import jsonify
+    from .models import User
+    from flask_jwt_extended import get_jwt_identity, get_jwt
+    
+    try:
+        from flask_jwt_extended import verify_jwt_in_request
+        verify_jwt_in_request()
+        
+        current_user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        
+        # Ensure it's a user token and user can only access their own data
+        if claims.get('user_type') == 'driver' or current_user_id != user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+            
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    return jsonify({
+        "id": user.id,
+        "name": user.name,
+        "phone_number": user.phone_number,
+        "email": user.email
+    })
 
 # Run directly
 if __name__ == '__main__':

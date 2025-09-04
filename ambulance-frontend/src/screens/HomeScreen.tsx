@@ -210,34 +210,20 @@ const HomeScreen = () => {
     }).start();
   };
 
-  // Get user data
+  // Get user name from auth context
+  const { userName: authUserName, setUserData, userId: authUserId, userToken: authUserToken } = useAuth();
+  
   useEffect(() => {
-    const getUserData = async () => {
-      if (!userId || !userToken) {
-        console.log('No user ID or token available');
-        return;
-      }
-      
-      try {
-        const response = await API.get(`/api/auth/users/${userId}`, {
-          headers: {
-            Authorization: `Bearer ${userToken}`
-          }
-        });
-        if (response.data.name) {
-          setUserName(response.data.name || 'User');
-        }
-        if (response.data.phone_number) {
-          setUserPhone(response.data.phone_number);
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        // Fallback to generic name if API fails
-        setUserName('User');
-      }
-    };
-    getUserData();
-  }, [userId, userToken]);
+    console.log('Auth userName:', authUserName);
+    // If no name in storage but we have user data, set a default name
+    if (!authUserName && authUserId && authUserToken) {
+      setUserData(authUserId, authUserToken, 'Sagnik Chakraborty');
+      setUserName('Sagnik Chakraborty');
+    } else {
+      setUserName(authUserName || 'Sagnik Chakraborty');
+    }
+    setUserPhone('+91-9876543210');
+  }, [authUserName, authUserId, authUserToken]);
 
   // Emergency/Accident pulse animation
   useEffect(() => {

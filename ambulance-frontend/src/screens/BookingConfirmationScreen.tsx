@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { createBooking } from '../../services/api';
 
 interface BookingConfirmationScreenProps {
   route: {
@@ -13,9 +14,28 @@ interface BookingConfirmationScreenProps {
 const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps> = ({ route, navigation }) => {
   const { hospital } = route.params;
 
-  const handleConfirmBooking = () => {
-    // Navigate to tracking screen or back to home
-    navigation.navigate('Home');
+  const handleConfirmBooking = async () => {
+    try {
+      const bookingData = {
+        hospital_id: hospital.id,
+        pickup_location: 'Current Location',
+        pickup_latitude: 28.6139,
+        pickup_longitude: 77.2090,
+        booking_type: 'emergency',
+        emergency_type: 'medical',
+        severity: 'high',
+        patient_name: 'Patient Name',
+        patient_phone: '+91 9876543210'
+      };
+      
+      const result = await createBooking(bookingData);
+      console.log('Booking created with WebRTC:', result);
+      
+      navigation.navigate('LiveTracking', { bookingId: result.booking_id });
+    } catch (error) {
+      console.error('Booking failed:', error);
+      navigation.navigate('Home');
+    }
   };
 
   const handleCancel = () => {

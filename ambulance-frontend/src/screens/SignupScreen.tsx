@@ -107,7 +107,7 @@ export default function SignupScreen() {
       
       // Store user data and set as logged in
       if (userId && userToken) {
-        await setUserData(userId, userToken);
+        await setUserData(userId, userToken, name);
       }
     } catch (error: any) {
       const message = error.response?.data?.error || 'Failed to update profile';
