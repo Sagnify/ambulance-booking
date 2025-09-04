@@ -1,36 +1,14 @@
 from flask import Blueprint, request, jsonify
 from .models import User, db
 from .otp_routes import send_otp_helper, verify_otp_helper
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 import traceback
-import jwt
 import os
-from functools import wraps
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
-# JWT Secret Key (in production, use environment variable)
-JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key-change-in-production')
-
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'error': 'Token is missing'}), 401
-        
-        try:
-            if token.startswith('Bearer '):
-                token = token[7:]
-            data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-            current_user_id = data['user_id']
-        except jwt.ExpiredSignatureError:
-            return jsonify({'error': 'Token has expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'error': 'Token is invalid'}), 401
-        
-        return f(current_user_id, *args, **kwargs)
-    return decorated
+# Remove custom token_required decorator - using flask_jwt_extended instead
 
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
@@ -78,11 +56,14 @@ def signup_verify():
         db.session.commit()
         
         # Generate JWT token for new user
-        token = jwt.encode({
-            'user_id': user.id,
-            'phone_number': user.phone_number,
-            'exp': datetime.utcnow() + timedelta(days=30)
-        }, JWT_SECRET, algorithm='HS256')
+        token = create_access_token(
+            identity=str(user.id),
+            expires_delta=timedelta(days=30),
+            additional_claims={
+                "user_type": "user",
+                "phone_number": user.phone_number
+            }
+        )
         
         return jsonify({
             'message': 'User created successfully',
@@ -141,11 +122,14 @@ def login_verify():
             return jsonify({'error': 'User not found'}), 404
         
         # Generate JWT token
-        token = jwt.encode({
-            'user_id': user.id,
-            'phone_number': user.phone_number,
-            'exp': datetime.utcnow() + timedelta(days=30)
-        }, JWT_SECRET, algorithm='HS256')
+        token = create_access_token(
+            identity=str(user.id),
+            expires_delta=timedelta(days=30),
+            additional_claims={
+                "user_type": "user",
+                "phone_number": user.phone_number
+            }
+        )
         
         return jsonify({
             'message': 'Login successful',
@@ -161,8 +145,9 @@ def login_verify():
         return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/profile', methods=['PUT'])
-@token_required
-def update_profile(current_user_id):
+@jwt_required()
+def update_profile():
+    current_user_id = int(get_jwt_identity())
     data = request.get_json()
     
     user = User.query.get(current_user_id)
@@ -194,8 +179,9 @@ def update_profile(current_user_id):
     }), 200
 
 @auth_bp.route('/users/<int:user_id>', methods=['GET'])
-@token_required
-def get_user(current_user_id, user_id):
+@jwt_required()
+def get_user(user_id):
+    current_user_id = int(get_jwt_identity())
     try:
         # Ensure user can only access their own data
         if current_user_id != user_id:

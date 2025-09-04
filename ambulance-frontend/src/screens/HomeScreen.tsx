@@ -33,7 +33,7 @@ import { useNavigation } from '@react-navigation/native';
 const { width, height } = Dimensions.get('window');
 
 const HomeScreen = () => {
-  const { logout, userId, userToken } = useAuth();
+  const { logout } = useAuth();
   const { isDarkMode, colors } = useTheme();
   const navigation = useNavigation<any>();
   const [address, setAddress] = useState('Fetching location...');

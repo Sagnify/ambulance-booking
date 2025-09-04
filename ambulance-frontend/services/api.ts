@@ -10,6 +10,7 @@ const API = axios.create({
 // Add JWT token to requests
 API.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('userToken');
+  console.log('API Token:', token ? 'Present' : 'Missing');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -21,7 +22,7 @@ export const createBooking = async (bookingData: any) => {
     const response = await API.post('/api/bookings', bookingData);
     
     // Initialize WebRTC for realtime updates
-    const userId = await AsyncStorage.getItem('user_id');
+    const userId = await AsyncStorage.getItem('userId');
     if (userId) {
       const webrtc = new WebRTCService(`user_${userId}`);
       await webrtc.initialize(`hospital_${bookingData.hospital_id}`, true);

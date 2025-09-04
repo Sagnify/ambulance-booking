@@ -243,12 +243,11 @@ def delete_driver(hospital_id, driver_id):
 def create_booking():
     from flask import request, jsonify
     from .models import Booking, Driver, Hospital, User
-    from flask_jwt_extended import get_jwt_identity, get_jwt
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     import json
     
     try:
         # Verify JWT token
-        from flask_jwt_extended import verify_jwt_in_request
         verify_jwt_in_request()
         
         current_user_id = int(get_jwt_identity())
@@ -259,16 +258,16 @@ def create_booking():
             return jsonify({"error": "Invalid token type"}), 403
             
     except Exception as e:
-        return jsonify({"error": "Invalid or missing token"}), 401
-        
+        return jsonify({"error": "Invalid or missing token", "details": str(e)}), 401
+    
+    try:
         # Ensure tables exist
-        with app.app_context():
-            db.create_all()
-            
-            # Check if hospitals exist, if not seed them
-            if Hospital.query.count() == 0:
-                from . import seed_sample_hospitals
-                seed_sample_hospitals()
+        db.create_all()
+        
+        # Check if hospitals exist, if not seed them
+        if Hospital.query.count() == 0:
+            from . import seed_sample_hospitals
+            seed_sample_hospitals()
         
         data = request.get_json()
         
@@ -308,6 +307,7 @@ def create_booking():
             "status": "Pending",
             "message": "Booking created successfully"
         })
+        
     except Exception as e:
         db.session.rollback()
         return jsonify({
