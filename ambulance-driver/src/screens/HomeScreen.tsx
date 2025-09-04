@@ -11,16 +11,20 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { driverAPI } from '../services/api';
 import { locationService, LocationData } from '../services/location';
 import { Booking } from '../types';
+import ProfileModal from '../components/ProfileModal';
 
 const HomeScreen: React.FC = () => {
-  const { driver, logout } = useAuth();
+  const { driver } = useAuth();
+  const { theme } = useTheme();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAvailable, setIsAvailable] = useState(driver?.is_available || false);
   const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     initializeLocation();
@@ -46,14 +50,14 @@ const HomeScreen: React.FC = () => {
       setCurrentLocation(location);
 
       if (driver) {
-        await driverAPI.updateLocation(driver.id, location.latitude, location.longitude);
+        await driverAPI.updateLocation(location.latitude, location.longitude);
       }
 
       // Start watching location
       locationService.watchLocation(async (newLocation) => {
         setCurrentLocation(newLocation);
         if (driver) {
-          await driverAPI.updateLocation(driver.id, newLocation.latitude, newLocation.longitude);
+          await driverAPI.updateLocation(newLocation.latitude, newLocation.longitude);
         }
       });
     } catch (error) {
@@ -66,7 +70,7 @@ const HomeScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const assignedBookings = await driverAPI.getAssignedBookings(driver.id);
+      const assignedBookings = await driverAPI.getAssignedBookings();
       setBookings(assignedBookings);
     } catch (error) {
       console.error('Error fetching bookings:', error);
@@ -79,7 +83,7 @@ const HomeScreen: React.FC = () => {
     if (!driver) return;
 
     try {
-      await driverAPI.setAvailability(driver.id, value);
+      await driverAPI.setAvailability(value);
       setIsAvailable(value);
     } catch (error) {
       Alert.alert('Error', 'Failed to update availability');
@@ -95,31 +99,22 @@ const HomeScreen: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: logout },
-      ]
-    );
-  };
+
 
   const renderBookingItem = ({ item }: { item: Booking }) => (
-    <View style={styles.bookingCard}>
+    <View style={[styles.bookingCard, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
       <View style={styles.bookingHeader}>
-        <Text style={styles.bookingId}>Booking #{item.id}</Text>
+        <Text style={[styles.bookingId, { color: theme.text }]}>Booking #{item.id}</Text>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
         </View>
       </View>
 
       <View style={styles.bookingDetails}>
-        <Text style={styles.detailText}>📞 {item.user_phone}</Text>
-        <Text style={styles.detailText}>🏥 {item.hospital_name}</Text>
-        <Text style={styles.detailText}>📍 Pickup: {item.pickup_latitude.toFixed(4)}, {item.pickup_longitude.toFixed(4)}</Text>
-        <Text style={styles.detailText}>🕒 {new Date(item.created_at).toLocaleString()}</Text>
+        <Text style={[styles.detailText, { color: theme.textSecondary }]}>📞 {item.user_phone}</Text>
+        <Text style={[styles.detailText, { color: theme.textSecondary }]}>🏥 {item.hospital_name}</Text>
+        <Text style={[styles.detailText, { color: theme.textSecondary }]}>📍 Pickup: {item.pickup_latitude.toFixed(4)}, {item.pickup_longitude.toFixed(4)}</Text>
+        <Text style={[styles.detailText, { color: theme.textSecondary }]}>🕒 {new Date(item.created_at).toLocaleString()}</Text>
       </View>
 
       <View style={styles.actionButtons}>
@@ -164,20 +159,22 @@ const HomeScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.surface }]}>
         <View>
-          <Text style={styles.welcomeText}>Welcome back,</Text>
-          <Text style={styles.driverName}>{driver?.name}</Text>
+          <Text style={[styles.welcomeText, { color: theme.textSecondary }]}>Welcome back,</Text>
+          <Text style={[styles.driverName, { color: theme.text }]}>{driver?.name}</Text>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Logout</Text>
+        <TouchableOpacity onPress={() => setShowProfile(true)} style={[styles.profileButton, { backgroundColor: theme.primary }]}>
+          <Text style={styles.profileButtonText}>
+            {driver?.name?.charAt(0).toUpperCase() || 'D'}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.statusCard}>
+      <View style={[styles.statusCard, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
         <View style={styles.availabilityRow}>
-          <Text style={styles.availabilityLabel}>Available for bookings</Text>
+          <Text style={[styles.availabilityLabel, { color: theme.text }]}>Available for bookings</Text>
           <Switch
             value={isAvailable}
             onValueChange={handleAvailabilityToggle}
@@ -187,14 +184,14 @@ const HomeScreen: React.FC = () => {
         </View>
         
         {currentLocation && (
-          <Text style={styles.locationText}>
+          <Text style={[styles.locationText, { color: theme.textSecondary }]}>
             📍 Current: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
           </Text>
         )}
       </View>
 
       <View style={styles.bookingsSection}>
-        <Text style={styles.sectionTitle}>Assigned Bookings ({bookings.length})</Text>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Assigned Bookings ({bookings.length})</Text>
         
         <FlatList
           data={bookings}
@@ -206,12 +203,17 @@ const HomeScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No bookings assigned</Text>
-              <Text style={styles.emptySubtext}>Pull to refresh</Text>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No bookings assigned</Text>
+              <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>Pull to refresh</Text>
             </View>
           }
         />
       </View>
+      
+      <ProfileModal 
+        visible={showProfile} 
+        onClose={() => setShowProfile(false)} 
+      />
     </View>
   );
 };
@@ -219,7 +221,6 @@ const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
   },
   header: {
     flexDirection: 'row',
@@ -227,33 +228,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 60,
-    backgroundColor: '#fff',
   },
   welcomeText: {
     fontSize: 16,
-    color: '#666',
   },
   driverName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
   },
-  logoutButton: {
-    backgroundColor: '#FF3B30',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  logoutText: {
+  profileButtonText: {
     color: '#fff',
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   statusCard: {
-    backgroundColor: '#fff',
     margin: 20,
     padding: 20,
     borderRadius: 12,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -268,11 +266,9 @@ const styles = StyleSheet.create({
   availabilityLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
   },
   locationText: {
     fontSize: 14,
-    color: '#666',
   },
   bookingsSection: {
     flex: 1,
@@ -281,15 +277,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 16,
   },
   bookingCard: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -304,7 +297,6 @@ const styles = StyleSheet.create({
   bookingId: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -321,7 +313,6 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
-    color: '#666',
     marginBottom: 4,
   },
   actionButtons: {
@@ -353,12 +344,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: '#666',
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
   },
 });
 

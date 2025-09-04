@@ -15,6 +15,8 @@ import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-
 import { useRoute, useNavigation } from '@react-navigation/native';
 import MapViewComponent from '../components/MapView';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import API from '../../services/api';
 
 const { width, height } = Dimensions.get('window');
 const API_BASE_URL = 'https://ambulance-booking-roan.vercel.app';
@@ -24,6 +26,7 @@ const LiveTrackingScreen = () => {
   const navigation = useNavigation();
   const { bookingData } = route.params as { bookingData: any };
   const { colors } = useTheme();
+  const { userToken } = useAuth();
   const webViewRef = useRef(null);
   
   const [booking, setBooking] = useState<{ booking_id: number } | null>(null);
@@ -73,28 +76,15 @@ const LiveTrackingScreen = () => {
     console.log('Creating booking with data:', bookingData);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...bookingData,
-          destination: bookingData.destination || bookingData.pickup_location
-        }),
+      const response = await API.post('/api/bookings', {
+        ...bookingData,
+        destination: bookingData.destination || bookingData.pickup_location
       });
       
-      if (response.ok) {
-        const result = await response.json();
-        setBooking({ booking_id: result.booking_id });
-      } else {
-        const errorText = await response.text();
-        console.error('Booking API Error:', response.status, errorText);
-        throw new Error(`API Error: ${response.status}`);
-      }
-    } catch (error) {
+      setBooking({ booking_id: response.data.booking_id });
+    } catch (error: any) {
       console.error('Booking creation failed:', error);
-      Alert.alert('Error', 'Booking failed. Backend issue.');
+      Alert.alert('Error', error.response?.data?.error || 'Booking failed. Please try again.');
     }
   };
 
@@ -102,18 +92,16 @@ const LiveTrackingScreen = () => {
     if (!booking) return;
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${booking.booking_id}/status`);
-      if (response.ok) {
-        const result = await response.json();
-        
-        if (result.status === 'Assigned' && result.ambulance) {
-          setIsAssigned(true);
-          setAssignedDriver(result.ambulance);
-          setAmbulanceLocation({
-            latitude: userLocation.latitude + 0.01,
-            longitude: userLocation.longitude + 0.01
-          });
-        }
+      const response = await API.get(`/api/bookings/${booking.booking_id}/status`);
+      const result = response.data;
+      
+      if (result.status === 'Assigned' && result.ambulance) {
+        setIsAssigned(true);
+        setAssignedDriver(result.ambulance);
+        setAmbulanceLocation({
+          latitude: userLocation.latitude + 0.01,
+          longitude: userLocation.longitude + 0.01
+        });
       }
     } catch (error) {
       // Silently ignore API errors for demo
@@ -124,25 +112,16 @@ const LiveTrackingScreen = () => {
     if (!booking || isAssigned) return;
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${booking.booking_id}/auto-assign`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await API.post(`/api/bookings/${booking.booking_id}/auto-assign`);
+      const result = response.data;
       
-      if (response.ok) {
-        const result = await response.json();
-        if (result.driver) {
-          setIsAssigned(true);
-          setAssignedDriver(result.driver);
-          setAmbulanceLocation({
-            latitude: userLocation.latitude + 0.01,
-            longitude: userLocation.longitude + 0.01
-          });
-        }
-      } else {
-        console.error('Auto-assignment failed:', response.status);
+      if (result.driver) {
+        setIsAssigned(true);
+        setAssignedDriver(result.driver);
+        setAmbulanceLocation({
+          latitude: userLocation.latitude + 0.01,
+          longitude: userLocation.longitude + 0.01
+        });
       }
     } catch (error) {
       console.error('Auto-assignment API error:', error);

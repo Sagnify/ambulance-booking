@@ -1,32 +1,48 @@
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Driver, Booking } from '../types';
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'https://ambulance-booking-roan.vercel.app/';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
 });
 
+// Add JWT token to requests
+api.interceptors.request.use(async (config) => {
+  const token = await AsyncStorage.getItem('driver_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const driverAPI = {
-  login: async (loginId: string, password: string): Promise<Driver> => {
+  login: async (loginId: string, password: string): Promise<{ token: string; driver: Driver }> => {
     const response = await api.post('/driver/login', {
       login_id: loginId,
       password: password,
     });
-    return response.data;
+    
+    // Store JWT token
+    await AsyncStorage.setItem('driver_token', response.data.access_token);
+    
+    return {
+      token: response.data.access_token,
+      driver: response.data.driver
+    };
   },
 
-  updateLocation: async (driverId: number, latitude: number, longitude: number): Promise<void> => {
+  updateLocation: async (latitude: number, longitude: number): Promise<void> => {
     await api.post('/driver/location', {
-      driver_id: driverId,
       latitude,
       longitude,
     });
   },
 
-  getAssignedBookings: async (driverId: number): Promise<Booking[]> => {
-    const response = await api.get(`/driver/${driverId}/bookings`);
+  getAssignedBookings: async (): Promise<Booking[]> => {
+    const response = await api.get('/driver/bookings');
     return response.data;
   },
 
@@ -37,10 +53,13 @@ export const driverAPI = {
     });
   },
 
-  setAvailability: async (driverId: number, isAvailable: boolean): Promise<void> => {
+  setAvailability: async (isAvailable: boolean): Promise<void> => {
     await api.post('/driver/availability', {
-      driver_id: driverId,
       is_available: isAvailable,
     });
+  },
+
+  logout: async (): Promise<void> => {
+    await AsyncStorage.removeItem('driver_token');
   },
 };

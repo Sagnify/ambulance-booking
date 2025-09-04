@@ -5,8 +5,10 @@ def seed_hospitals():
     app = create_app()
     
     with app.app_context():
-        # Clear existing hospitals
-        Hospital.query.delete()
+        # Check if hospitals already exist
+        if Hospital.query.count() > 0:
+            print("Hospitals already exist, skipping seed.")
+            return
         
         # Sample hospitals data for Kolkata (near Baghajatin)
         hospitals_data = [

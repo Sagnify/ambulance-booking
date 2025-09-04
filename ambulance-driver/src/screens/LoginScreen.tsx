@@ -25,7 +25,7 @@ const LoginScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const driver = await driverAPI.login(loginId.trim(), password.trim());
+      const { driver } = await driverAPI.login(loginId.trim(), password.trim());
       await login(driver);
     } catch (error: any) {
       Alert.alert(

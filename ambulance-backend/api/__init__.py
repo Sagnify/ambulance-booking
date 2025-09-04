@@ -168,10 +168,9 @@ def create_app(config_name=None):
     # Initialize database tables
     with app.app_context():
         try:
-            # Drop and recreate all tables to match updated schema
-            db.drop_all()
+            # Create tables if they don't exist (don't drop existing data)
             db.create_all()
-            # Auto-seed hospitals after table creation
+            # Auto-seed hospitals only if none exist
             from .models import Hospital
             if Hospital.query.count() == 0:
                 seed_sample_hospitals()

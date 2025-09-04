@@ -57,6 +57,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       await AsyncStorage.removeItem('driver');
+      await AsyncStorage.removeItem('driver_token');
       setDriver(null);
     } catch (error) {
       console.error('Error removing driver data:', error);
