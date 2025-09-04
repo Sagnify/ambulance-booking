@@ -74,13 +74,19 @@
                 this.dataChannel = channel;
 
                 channel.onopen = () => {
-                    console.log('Data channel opened');
+                    console.log('✅ Hospital WebRTC: Data channel opened - Real-time streaming active!');
+                    console.log('🔄 Hospital WebRTC: Stopping signaling polling (switching to real-time)');
+                    if (this.pollingInterval) {
+                        clearInterval(this.pollingInterval);
+                        this.pollingInterval = null;
+                    }
                     this.updateStatus('Connected');
                 };
 
                 channel.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
+                        console.log('📡 Hospital WebRTC Real-time data received:', data);
                         this.handleBookingUpdate(data);
                     } catch (error) {
                         console.error('Error parsing data channel message:', error);
@@ -88,7 +94,7 @@
                 };
 
                 channel.onclose = () => {
-                    console.log('Data channel closed');
+                    console.log('❌ Hospital WebRTC: Data channel closed - Real-time streaming stopped');
                     this.updateStatus('Disconnected');
                 };
             }
@@ -136,20 +142,28 @@
             }
 
             startPolling() {
+                console.log('🔄 Hospital WebRTC: Starting signaling polling...');
                 this.pollingInterval = setInterval(async () => {
                     try {
                         const response = await fetch(`https://ambulance-booking-roan.vercel.app/api/webrtc/messages/${this.peerId}`);
                         const data = await response.json();
 
+                        if (data.messages && data.messages.length > 0) {
+                            console.log(`📨 Hospital WebRTC: Received ${data.messages.length} signaling message(s)`);
+                        }
+
                         for (const message of data.messages) {
                             switch (message.type) {
                                 case 'offer':
+                                    console.log('📥 Hospital WebRTC: Processing offer from', message.from);
                                     await this.handleOffer(message.offer, message.from);
                                     break;
                                 case 'answer':
+                                    console.log('📥 Hospital WebRTC: Processing answer');
                                     await this.handleAnswer(message.answer);
                                     break;
                                 case 'ice-candidate':
+                                    console.log('🧊 Hospital WebRTC: Processing ICE candidate');
                                     await this.handleIceCandidate(message.candidate);
                                     break;
                             }
@@ -162,7 +176,7 @@
                             body: JSON.stringify({ peer_id: this.peerId })
                         });
                     } catch (error) {
-                        console.error('Polling error:', error);
+                        console.error('❌ Hospital WebRTC Polling error:', error);
                     }
                 }, 1000);
             }

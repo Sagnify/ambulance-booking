@@ -69,12 +69,18 @@ class WebRTCService {
     this.dataChannel = channel;
 
     channel.onopen = () => {
-      console.log('Data channel opened');
+      console.log('✅ WebRTC: Data channel opened - Real-time streaming active!');
+      console.log('🔄 WebRTC: Stopping signaling polling (switching to real-time)');
+      if (this.pollingInterval) {
+        clearInterval(this.pollingInterval);
+        this.pollingInterval = null;
+      }
     };
 
     channel.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('📡 WebRTC Real-time data received:', data);
         if (this.onDataReceived) {
           this.onDataReceived(data);
         }
@@ -84,7 +90,7 @@ class WebRTCService {
     };
 
     channel.onclose = () => {
-      console.log('Data channel closed');
+      console.log('❌ WebRTC: Data channel closed - Real-time streaming stopped');
     };
   }
 
@@ -148,20 +154,28 @@ class WebRTCService {
   }
 
   private startPolling() {
+    console.log('🔄 WebRTC: Starting signaling polling...');
     this.pollingInterval = setInterval(async () => {
       try {
         const response = await fetch(`https://ambulance-booking-roan.vercel.app/api/webrtc/messages/${this.peerId}`);
         const data = await response.json();
 
+        if (data.messages && data.messages.length > 0) {
+          console.log(`📨 WebRTC: Received ${data.messages.length} signaling message(s)`);
+        }
+
         for (const message of data.messages) {
           switch (message.type) {
             case 'offer':
+              console.log('📥 WebRTC: Processing offer from', message.from);
               await this.handleOffer(message.offer, message.from);
               break;
             case 'answer':
+              console.log('📥 WebRTC: Processing answer');
               await this.handleAnswer(message.answer);
               break;
             case 'ice-candidate':
+              console.log('🧊 WebRTC: Processing ICE candidate');
               await this.handleIceCandidate(message.candidate);
               break;
           }
@@ -174,20 +188,23 @@ class WebRTCService {
           body: JSON.stringify({ peer_id: this.peerId })
         });
       } catch (error) {
-        console.error('Polling error:', error);
+        console.error('❌ WebRTC Polling error:', error);
       }
-    }, 1000);
+    }, 200); // Faster polling for quicker signaling
   }
 
   sendBookingUpdate(bookingData: any) {
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
-      this.dataChannel.send(JSON.stringify({
+      const message = {
         type: 'booking_update',
         data: bookingData,
         timestamp: new Date().toISOString()
-      }));
+      };
+      this.dataChannel.send(JSON.stringify(message));
+      console.log('📤 WebRTC Real-time: Sent booking update:', message);
       return true;
     }
+    console.log('⚠️ WebRTC: Data channel not ready, cannot send real-time update');
     return false;
   }
 

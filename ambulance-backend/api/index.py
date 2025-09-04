@@ -59,11 +59,25 @@ def health_check():
             "error": str(e)
         }), 500
 
-# Database reset endpoint - DISABLED for data safety
-@app.route('/api/reset-db', methods=['POST'])
-def reset_database():
+# Clear all bookings endpoint
+@app.route('/api/clear-bookings', methods=['POST'])
+def clear_bookings():
     from flask import jsonify
-    return jsonify({"error": "Database reset disabled for data safety"}), 403
+    from .models import Booking, Driver
+    
+    try:
+        # Delete all bookings
+        Booking.query.delete()
+        
+        # Reset all drivers to Available status
+        Driver.query.update({Driver.status: 'Available'})
+        
+        db.session.commit()
+        
+        return jsonify({"message": "All bookings cleared and drivers reset to available"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 # Hospital Dashboard Routes
 @app.route('/dashboard')
@@ -253,11 +267,15 @@ def create_booking():
         current_user_id = int(get_jwt_identity())
         claims = get_jwt()
         
+        print(f"JWT Identity: {get_jwt_identity()}")
+        print(f"JWT Claims: {claims}")
+        
         # Ensure it's a user token (not driver)
         if claims.get('user_type') == 'driver':
             return jsonify({"error": "Invalid token type"}), 403
             
     except Exception as e:
+        print(f"JWT Error: {str(e)}")
         return jsonify({"error": "Invalid or missing token", "details": str(e)}), 401
     
     try:

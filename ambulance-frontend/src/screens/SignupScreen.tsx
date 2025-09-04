@@ -67,9 +67,10 @@ export default function SignupScreen() {
       });
       
       // Store user data from signup response
-      const { user_id, token } = response.data;
+      const { user_id, access_token, token } = response.data;
+      const authToken = access_token || token; // Support both formats
       setUserId(user_id.toString());
-      setUserToken(token);
+      setUserToken(authToken);
       
       nextStep();
     } catch (error: any) {
