@@ -211,52 +211,98 @@ const LiveTrackingScreen = () => {
             </TouchableOpacity>
           </View>
           
-          <View style={[styles.hospitalInfo, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.hospitalLabel, { color: colors.textSecondary }]}>Hospital:</Text>
-            <Text style={[styles.hospitalName, { color: colors.text }]}>{bookingData.destination}</Text>
-            <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>Pickup: {bookingData.pickup_location}</Text>
+          {/* Hospital & Driver Hybrid Card */}
+          <View style={[styles.hybridCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.hospitalSection}>
+              <View style={styles.hospitalIcon}>
+                <Text style={styles.hospitalIconText}>🏥</Text>
+              </View>
+              <View style={styles.hospitalDetails}>
+                <Text style={[styles.hospitalName, { color: colors.text }]}>{bookingData.destination}</Text>
+                <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>Pickup: {bookingData.pickup_location}</Text>
+              </View>
+            </View>
+            
+            {isAssigned && (
+              <>
+                <View style={styles.divider} />
+                <View style={styles.driverSection}>
+                  <View style={styles.driverAvatar}>
+                    <Text style={styles.driverAvatarText}>👨⚕️</Text>
+                  </View>
+                  <View style={styles.driverDetails}>
+                    <Text style={[styles.driverName, { color: colors.text }]}>{assignedDriver?.driver_name || 'Driver Assigned'}</Text>
+                    <Text style={[styles.vehicleNumber, { color: '#059669' }]}>{assignedDriver?.vehicle_number || 'AMB-001'}</Text>
+                    <Text style={[styles.etaText, { color: '#DC2626' }]}>ETA: 8-12 min</Text>
+                  </View>
+                  <View style={styles.quickActions}>
+                    <TouchableOpacity style={styles.quickCallButton}>
+                      <Text style={styles.quickCallText}>📞</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.quickChatButton}>
+                      <Text style={styles.quickChatText}>💬</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </>
+            )}
           </View>
           
-          {!isAssigned ? (
-            <View style={styles.loadingContainer}>
-              <Text style={[styles.loadingTitle, { color: getThemeColor() }]}>
-                Assigning Ambulance...
-              </Text>
-              <View style={styles.loadingSpinner}>
-                <Text style={[styles.timerText, { color: getThemeColor() }]}>{timeRemaining}</Text>
+          {/* Status Tracker */}
+          <View style={[styles.statusTracker, { backgroundColor: colors.surface }]}>
+            <View style={styles.statusHeader}>
+              <Text style={[styles.statusTitle, { color: colors.text }]}>Ambulance Status</Text>
+              <View style={[styles.statusBadge, { backgroundColor: isAssigned ? '#10B981' : '#F59E0B' }]}>
+                <Text style={styles.statusBadgeText}>
+                  {isAssigned ? '🚑 Assigned' : '⏳ Assigning'}
+                </Text>
               </View>
-              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                {timeRemaining > 0 ? 
-                  'Hospital is selecting an ambulance for you' : 
-                  'Auto-assigning nearest available ambulance...'
-                }
-              </Text>
             </View>
-          ) : (
-            <View style={styles.ambulanceStatus}>
-              <View style={styles.statusRow}>
-                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Driver:</Text>
-                <Text style={[styles.driverText, { color: colors.text }]}>{assignedDriver?.driver_name || 'Assigned'}</Text>
-              </View>
-              <View style={styles.statusRow}>
-                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>Vehicle:</Text>
-                <Text style={[styles.driverText, { color: colors.text }]}>{assignedDriver?.vehicle_number || 'AMB-001'}</Text>
-              </View>
-              <View style={styles.statusRow}>
-                <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>ETA:</Text>
-                <Text style={styles.etaText}>8-12 min</Text>
+            
+            <View style={styles.statusSteps}>
+              <View style={styles.stepItem}>
+                <View style={[styles.stepDot, { backgroundColor: '#10B981' }]} />
+                <View style={styles.stepContent}>
+                  <Text style={[styles.stepTitle, { color: colors.text }]}>Request Placed</Text>
+                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>Just now</Text>
+                </View>
               </View>
               
-              <View style={styles.actionButtons}>
-                <TouchableOpacity style={styles.callButton}>
-                  <Text style={styles.callText}>📞 Call Driver</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.chatButton}>
-                  <Text style={styles.chatText}>💬 Live Chat</Text>
-                </TouchableOpacity>
+              <View style={[styles.stepLine, { backgroundColor: isAssigned ? '#10B981' : '#E5E7EB' }]} />
+              
+              <View style={styles.stepItem}>
+                <View style={[styles.stepDot, { backgroundColor: isAssigned ? '#10B981' : '#E5E7EB' }]} />
+                <View style={styles.stepContent}>
+                  <Text style={[styles.stepTitle, { color: isAssigned ? colors.text : colors.textSecondary }]}>Ambulance Assigned</Text>
+                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>
+                    {isAssigned ? 'Completed' : timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Processing...'}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={[styles.stepLine, { backgroundColor: '#E5E7EB' }]} />
+              
+              <View style={styles.stepItem}>
+                <View style={[styles.stepDot, { backgroundColor: '#E5E7EB' }]} />
+                <View style={styles.stepContent}>
+                  <Text style={[styles.stepTitle, { color: colors.textSecondary }]}>On the Way</Text>
+                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>Pending</Text>
+                </View>
+              </View>
+              
+              <View style={[styles.stepLine, { backgroundColor: '#E5E7EB' }]} />
+              
+              <View style={styles.stepItem}>
+                <View style={[styles.stepDot, { backgroundColor: '#E5E7EB' }]} />
+                <View style={styles.stepContent}>
+                  <Text style={[styles.stepTitle, { color: colors.textSecondary }]}>Arrived</Text>
+                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>Pending</Text>
+                </View>
               </View>
             </View>
-          )}
+          </View>
+          
+
           
           {bookingData.emergency_type && (
             <View style={[styles.summaryContainer, { backgroundColor: colors.surface }]}>
@@ -300,6 +346,8 @@ const LiveTrackingScreen = () => {
           ambulanceLocation={ambulanceLocation ?? undefined}
           showHospitalMarker={true}
           showAmbulanceMarker={isAssigned}
+          showUserMarker={true}
+          showRoute={isAssigned}
         />
 
         {renderBottomPanel()}
@@ -386,26 +434,82 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  hospitalInfo: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    padding: 16,
+  // Hybrid Card Styles
+  hybridCard: {
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  hospitalLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
+  hospitalSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hospitalIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  hospitalIconText: {
+    fontSize: 24,
+  },
+  hospitalDetails: {
+    flex: 1,
   },
   hospitalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontSize: 18,
+    fontWeight: '700',
     marginBottom: 4,
   },
   hospitalDistance: {
     fontSize: 14,
-    color: '#666',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 16,
+  },
+  driverSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  driverDetails: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickCallButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickCallText: {
+    fontSize: 18,
+  },
+  quickChatButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickChatText: {
+    fontSize: 18,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -505,6 +609,115 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#000',
+  },
+  
+  // Status Tracker Styles
+  statusTracker: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  statusTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusSteps: {
+    paddingLeft: 8,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 16,
+  },
+  stepContent: {
+    flex: 1,
+    paddingVertical: 8,
+  },
+  stepTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  stepTime: {
+    fontSize: 14,
+  },
+  stepLine: {
+    width: 2,
+    height: 20,
+    marginLeft: 5,
+    marginRight: 16,
+  },
+  
+  // Driver Card Styles
+  driverCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  driverHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  driverAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  driverAvatarText: {
+    fontSize: 24,
+  },
+  driverInfo: {
+    flex: 1,
+  },
+  driverName: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  vehicleNumber: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  driverActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
 });
 

@@ -132,9 +132,10 @@ def hospital_dashboard_data(hospital_id):
             "id": d.id,
             "name": d.name,
             "phone": d.phone_number,
+            "license_number": d.license_number,
             "vehicle": d.vehicle_number,
             "status": d.status,
-            "location": d.current_location,
+            "location": f"{d.current_latitude},{d.current_longitude}" if d.current_latitude and d.current_longitude else "Unknown",
             "login_id": d.driver_id,
             "password": d.password
         } for d in drivers],
@@ -189,6 +190,7 @@ def add_driver(hospital_id):
     driver = Driver(
         name=data['name'],
         phone_number=data['phone'],
+        license_number=data.get('license_number', f'LIC{existing_count + 1:04d}'),
         vehicle_number=data['vehicle'],
         hospital_id=hospital_id,
         status='Available',
@@ -411,6 +413,140 @@ def get_all_drivers():
             }
         } for driver, hospital in drivers]
     })
+
+# Driver Authentication APIs
+@app.route('/driver/login', methods=['POST'])
+def driver_login():
+    from flask import request, jsonify
+    from .models import Driver, Hospital
+    
+    data = request.get_json()
+    login_id = data.get('login_id')
+    password = data.get('password')
+    
+    if not login_id or not password:
+        return jsonify({"error": "Login ID and password required"}), 400
+    
+    driver = Driver.query.filter_by(driver_id=login_id, password=password).first()
+    
+    if driver:
+        hospital = Hospital.query.get(driver.hospital_id)
+        return jsonify({
+            "id": driver.id,
+            "name": driver.name,
+            "phone": driver.phone_number,
+            "license_number": driver.license_number,
+            "hospital_id": driver.hospital_id,
+            "is_available": driver.is_available,
+            "current_latitude": driver.current_latitude,
+            "current_longitude": driver.current_longitude,
+            "hospital_name": hospital.name if hospital else None
+        })
+    
+    return jsonify({"error": "Invalid credentials"}), 401
+
+@app.route('/driver/location', methods=['POST'])
+def update_driver_location():
+    from flask import request, jsonify
+    from .models import Driver
+    
+    data = request.get_json()
+    driver_id = data.get('driver_id')
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    
+    if not all([driver_id, latitude, longitude]):
+        return jsonify({"error": "Driver ID, latitude, and longitude required"}), 400
+    
+    driver = Driver.query.get(driver_id)
+    if not driver:
+        return jsonify({"error": "Driver not found"}), 404
+    
+    driver.current_latitude = latitude
+    driver.current_longitude = longitude
+    db.session.commit()
+    
+    return jsonify({"message": "Location updated successfully"})
+
+@app.route('/driver/<int:driver_id>/bookings')
+def get_driver_bookings(driver_id):
+    from flask import jsonify
+    from .models import Booking, Hospital
+    
+    bookings = Booking.query.filter_by(ambulance_id=driver_id).filter(
+        Booking.status.in_(['assigned', 'en_route', 'arrived'])
+    ).all()
+    
+    result = []
+    for booking in bookings:
+        hospital = Hospital.query.get(booking.hospital_id)
+        result.append({
+            "id": booking.id,
+            "user_phone": booking.patient_phone or booking.user.phone_number if booking.user else 'Unknown',
+            "hospital_id": booking.hospital_id,
+            "driver_id": booking.ambulance_id,
+            "pickup_latitude": booking.pickup_latitude,
+            "pickup_longitude": booking.pickup_longitude,
+            "status": booking.status,
+            "created_at": booking.requested_at.isoformat(),
+            "hospital_name": hospital.name if hospital else None,
+            "hospital_address": hospital.address if hospital else None
+        })
+    
+    return jsonify(result)
+
+@app.route('/booking/status', methods=['POST'])
+def update_booking_status():
+    from flask import request, jsonify
+    from .models import Booking, Driver
+    from datetime import datetime
+    
+    data = request.get_json()
+    booking_id = data.get('booking_id')
+    status = data.get('status')
+    
+    if not booking_id or not status:
+        return jsonify({"error": "Booking ID and status required"}), 400
+    
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify({"error": "Booking not found"}), 404
+    
+    booking.status = status
+    
+    if status == 'completed':
+        booking.completed_at = datetime.utcnow()
+        # Make driver available again
+        if booking.ambulance_id:
+            driver = Driver.query.get(booking.ambulance_id)
+            if driver:
+                driver.status = 'Available'
+    
+    db.session.commit()
+    
+    return jsonify({"message": "Booking status updated successfully"})
+
+@app.route('/driver/availability', methods=['POST'])
+def set_driver_availability():
+    from flask import request, jsonify
+    from .models import Driver
+    
+    data = request.get_json()
+    driver_id = data.get('driver_id')
+    is_available = data.get('is_available')
+    
+    if driver_id is None or is_available is None:
+        return jsonify({"error": "Driver ID and availability status required"}), 400
+    
+    driver = Driver.query.get(driver_id)
+    if not driver:
+        return jsonify({"error": "Driver not found"}), 404
+    
+    driver.is_available = is_available
+    driver.status = 'Available' if is_available else 'Offline'
+    db.session.commit()
+    
+    return jsonify({"message": "Availability updated successfully"})
 
 # Run directly
 if __name__ == '__main__':

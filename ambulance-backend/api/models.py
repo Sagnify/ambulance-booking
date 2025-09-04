@@ -38,9 +38,12 @@ class Driver(db.Model, TimestampMixin):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     phone_number = db.Column(db.String(32), nullable=False)
+    license_number = db.Column(db.String(32), unique=True, nullable=False)
     vehicle_number = db.Column(db.String(32), unique=True, nullable=False)
     status = db.Column(db.String(20), default='Available', nullable=False)  # Available/Busy/Offline
-    current_location = db.Column(db.String(255), nullable=True)  # Coordinates
+    current_latitude = db.Column(db.Float, nullable=True)
+    current_longitude = db.Column(db.Float, nullable=True)
+    is_available = db.Column(db.Boolean, default=True, nullable=False)
     hospital_id = db.Column(db.Integer, db.ForeignKey('hospitals.id'), nullable=False)
     driver_id = db.Column(db.String(50), unique=True, nullable=True)  # Auto-generated login ID
     password = db.Column(db.String(255), default='driver123', nullable=True)  # Default password

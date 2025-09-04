@@ -14,6 +14,8 @@ interface MapViewProps {
   ambulanceLocation?: { latitude: number; longitude: number };
   showHospitalMarker?: boolean;
   showAmbulanceMarker?: boolean;
+  showUserMarker?: boolean;
+  showRoute?: boolean;
 }
 
 const MapViewComponent: React.FC<MapViewProps> = ({ 
@@ -26,7 +28,9 @@ const MapViewComponent: React.FC<MapViewProps> = ({
   hospitalLocation = null,
   ambulanceLocation = null,
   showHospitalMarker = false,
-  showAmbulanceMarker = false
+  showAmbulanceMarker = false,
+  showUserMarker = true,
+  showRoute = false
 }) => {
   const { isDarkMode } = useTheme();
   return (
@@ -64,6 +68,8 @@ const MapViewComponent: React.FC<MapViewProps> = ({
                 var ambulanceLocation = ${JSON.stringify(ambulanceLocation)};
                 var showHospitalMarker = ${showHospitalMarker};
                 var showAmbulanceMarker = ${showAmbulanceMarker};
+                var showUserMarker = ${showUserMarker};
+                var showRoute = ${showRoute};
                 
                 var nearbyHospitals = (apiHospitals && apiHospitals.length > 0) ? apiHospitals.map(h => ({
                   id: h.id,
@@ -257,6 +263,29 @@ const MapViewComponent: React.FC<MapViewProps> = ({
                       iconSize: [40, 40],
                       className: 'active-ambulance-marker'
                     })
+                  }).addTo(map);
+                }
+                
+                // Draw simple route if all three markers are present
+                if (showRoute && specificHospitalMarker && specificAmbulanceMarker && hospitalLocation && ambulanceLocation) {
+                  // Route from ambulance to user (green)
+                  L.polyline([
+                    [ambulanceLocation.latitude, ambulanceLocation.longitude],
+                    [${userLocation.latitude}, ${userLocation.longitude}]
+                  ], {
+                    color: '#10B981',
+                    weight: 4,
+                    opacity: 0.8
+                  }).addTo(map);
+                  
+                  // Route from user to hospital (blue)
+                  L.polyline([
+                    [${userLocation.latitude}, ${userLocation.longitude}],
+                    [hospitalLocation.latitude, hospitalLocation.longitude]
+                  ], {
+                    color: '#007AFF',
+                    weight: 4,
+                    opacity: 0.8
                   }).addTo(map);
                 }
                 

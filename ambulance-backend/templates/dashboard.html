@@ -128,6 +128,7 @@
                                 <tr>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">License</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Login ID</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Password</th>
@@ -158,6 +159,10 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Phone</label>
                         <input type="tel" id="driverPhone" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">License Number</label>
+                        <input type="text" id="driverLicense" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., WB01DL001">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Vehicle Number</label>
@@ -235,7 +240,7 @@
             const tbody = document.getElementById('driversTableBody');
             
             if (drivers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">No drivers found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-4 text-center text-gray-500">No drivers found</td></tr>';
                 return;
             }
             
@@ -243,6 +248,7 @@
                 <tr>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${driver.name}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${driver.phone}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-600">${driver.license_number || 'N/A'}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${driver.vehicle}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-600">${driver.login_id || 'N/A'}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">${driver.password || 'N/A'}</td>
@@ -263,12 +269,12 @@
             `).join('');
         }
         
-        async function addDriver(name, phone, vehicle) {
+        async function addDriver(name, phone, license_number, vehicle) {
             try {
                 const response = await fetch(`${API_BASE_URL}/api/hospital/${hospitalId}/drivers`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, phone, vehicle })
+                    body: JSON.stringify({ name, phone, license_number, vehicle })
                 });
                 
                 if (response.ok) {
@@ -381,10 +387,10 @@
             
             container.innerHTML = bookings.map(booking => {
                 const assignmentType = booking.auto_assigned ? 'AUTO' : 'MANUAL';
-                const assignedTime = new Date(booking.assigned_at);
+                const assignedTime = new Date(booking.assigned_at + 'Z'); // Force UTC
                 const now = new Date();
-                const timeElapsedMs = now - assignedTime;
-                const timeElapsedMin = Math.floor(timeElapsedMs / (1000 * 60));
+                const timeElapsedMs = now.getTime() - assignedTime.getTime();
+                const timeElapsedMin = Math.max(0, Math.floor(timeElapsedMs / (1000 * 60)));
                 const timeElapsedHr = Math.floor(timeElapsedMin / 60);
                 const timeDisplay = timeElapsedHr > 0 ? `${timeElapsedHr}h ${timeElapsedMin % 60}m` : `${timeElapsedMin}m`;
                 
@@ -598,8 +604,9 @@
             e.preventDefault();
             const name = document.getElementById('driverName').value;
             const phone = document.getElementById('driverPhone').value;
+            const license_number = document.getElementById('driverLicense').value;
             const vehicle = document.getElementById('driverVehicle').value;
-            addDriver(name, phone, vehicle);
+            addDriver(name, phone, license_number, vehicle);
         });
         
         document.getElementById('logoutBtn').addEventListener('click', function() {
