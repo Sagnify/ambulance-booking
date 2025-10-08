@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hospital PeerPyRTC Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .booking-update { background-color: #fff3cd; padding: 10px; margin: 5px 0; border-radius: 5px; }
+        #messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Hospital PeerPyRTC Dashboard</h1>
+    
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <button onclick="connectHospital()">Connect Hospital</button>
+    <button onclick="disconnect()">Disconnect</button>
+    
+    <h3>Real-time Booking Updates</h3>
+    <div id="messages"></div>
+
+    <script>
+        class HospitalPeerPyRTC {
+            constructor() {
+                this.peerId = 'hospital_' + Math.random().toString(36).substr(2, 9);
+                this.serverUrl = 'https://ambulance-booking-roan.vercel.app/api';
+                this.connected = false;
+                this.pollingInterval = null;
+            }
+
+            async connect() {
+                console.log('🔗 Hospital PeerPyRTC: Connecting...');
+                
+                try {
+                    const response = await fetch(`${this.serverUrl}/webrtc/connect`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            peer_id: this.peerId,
+                            peer_type: 'hospital'
+                        })
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        console.log('✅ Hospital PeerPyRTC: Connected successfully');
+                        this.connected = true;
+                        this.updateStatus('Connected');
+                        this.startListening();
+                        return true;
+                    } else {
+                        console.error('❌ Hospital PeerPyRTC: Connection failed', result.error);
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('❌ Hospital PeerPyRTC: Connection error', error);
+                    return false;
+                }
+            }
+
+            startListening() {
+                // Start polling for messages (simplified approach)
+                this.pollingInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`${this.serverUrl}/webrtc/status`);
+                        const status = await response.json();
+                        
+                        // In a real implementation, this would listen for incoming data
+                        // For now, we'll simulate receiving booking updates
+                    } catch (error) {
+                        console.error('Polling error:', error);
+                    }
+                }, 2000);
+            }
+
+            async disconnect() {
+                console.log('🔌 Hospital PeerPyRTC: Disconnecting...');
+                
+                if (this.pollingInterval) {
+                    clearInterval(this.pollingInterval);
+                }
+                
+                try {
+                    const response = await fetch(`${this.serverUrl}/webrtc/disconnect`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            peer_id: this.peerId
+                        })
+                    });
+
+                    if (response.ok) {
+                        console.log('✅ Hospital PeerPyRTC: Disconnected successfully');
+                        this.connected = false;
+                        this.updateStatus('Disconnected');
+                    }
+                } catch (error) {
+                    console.error('❌ Hospital PeerPyRTC: Disconnect error', error);
+                }
+            }
+
+            handleBookingUpdate(data) {
+                const messagesDiv = document.getElementById('messages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'booking-update';
+                
+                messageDiv.innerHTML = `
+                    <strong>New Booking Update (PeerPyRTC)</strong><br>
+                    <strong>Time:</strong> ${new Date().toLocaleString()}<br>
+                    <strong>Data:</strong> ${JSON.stringify(data, null, 2)}
+                `;
+                
+                messagesDiv.appendChild(messageDiv);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+
+            updateStatus(status) {
+                const statusDiv = document.getElementById('status');
+                statusDiv.textContent = status;
+                statusDiv.className = status === 'Connected' ? 'status connected' : 'status disconnected';
+            }
+        }
+
+        const hospitalPeerPyRTC = new HospitalPeerPyRTC();
+
+        async function connectHospital() {
+            await hospitalPeerPyRTC.connect();
+        }
+
+        function disconnect() {
+            hospitalPeerPyRTC.disconnect();
+        }
+
+        // Simulate receiving booking updates for demo
+        setInterval(() => {
+            if (hospitalPeerPyRTC.connected) {
+                hospitalPeerPyRTC.handleBookingUpdate({
+                    type: 'booking_update',
+                    booking_id: Math.floor(Math.random() * 1000),
+                    status: 'created',
+                    timestamp: new Date().toISOString()
+                });
+            }
+        }, 10000);
+    </script>
+</body>
+</html>

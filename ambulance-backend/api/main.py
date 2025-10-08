@@ -2,14 +2,18 @@ from api import create_app
 from api.extensions import db
 from flask_cors import CORS
 from flask import render_template, request, jsonify
-from api.webrtc_signaling import webrtc_bp
+from api.webrtc_service import webrtc_bp
+from api.auth_routes import auth_bp
+from api.otp_routes import otp_bp
 
 # Create app via factory
 app = create_app()
 CORS(app)
 
-# Register WebRTC signaling blueprint
+# Register blueprints
 app.register_blueprint(webrtc_bp, url_prefix='/api')
+app.register_blueprint(auth_bp)
+app.register_blueprint(otp_bp)
 
 # Database health check
 @app.route('/api/health')
@@ -580,6 +584,127 @@ def get_user(user_id):
         "phone_number": user.phone_number,
         "email": user.email
     })
+
+# Hospital and Driver routes
+@app.route('/api/hospitals')
+def get_hospitals():
+    from .models import Hospital
+    hospitals = Hospital.query.all()
+    return jsonify([{
+        "id": h.id,
+        "name": h.name,
+        "address": h.address,
+        "contact_number": h.contact_number,
+        "latitude": h.latitude,
+        "longitude": h.longitude,
+        "type": h.type,
+        "emergency_services": h.emergency_services,
+        "ambulance_count": h.ambulance_count
+    } for h in hospitals])
+
+@app.route('/api/hospitals/nearby')
+def get_nearby_hospitals():
+    from .models import Hospital
+    lat = request.args.get('lat', type=float)
+    lng = request.args.get('lng', type=float)
+    radius = request.args.get('radius', 10, type=float)
+    
+    hospitals = Hospital.query.all()
+    nearby = []
+    
+    for h in hospitals:
+        # Simple distance calculation (not accurate but works for demo)
+        distance = ((h.latitude - lat) ** 2 + (h.longitude - lng) ** 2) ** 0.5 * 111
+        if distance <= radius:
+            nearby.append({
+                "id": h.id,
+                "name": h.name,
+                "address": h.address,
+                "latitude": h.latitude,
+                "longitude": h.longitude,
+                "type": h.type,
+                "distance": round(distance, 2)
+            })
+    
+    return jsonify(nearby)
+
+@app.route('/api/hospitals/seed', methods=['POST'])
+def seed_hospitals():
+    from . import seed_sample_hospitals
+    try:
+        seed_sample_hospitals()
+        return jsonify({"message": "Hospitals seeded successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/drivers')
+def get_all_drivers():
+    from .models import Driver, Hospital
+    
+    drivers = db.session.query(Driver, Hospital).join(Hospital, Driver.hospital_id == Hospital.id).all()
+    
+    return jsonify({
+        "total_drivers": len(drivers),
+        "drivers": [{
+            "id": driver.id,
+            "name": driver.name,
+            "phone": driver.phone_number,
+            "vehicle_number": driver.vehicle_number,
+            "status": driver.status,
+            "location": driver.current_location,
+            "login_id": driver.driver_id,
+            "hospital": {
+                "id": hospital.id,
+                "name": hospital.name,
+                "address": hospital.address,
+                "contact": hospital.contact_number
+            }
+        } for driver, hospital in drivers]
+    })
+
+# Root endpoint with API documentation
+@app.route('/')
+def api_list():
+    try:
+        from .models import Hospital, Driver
+        hospital_count = Hospital.query.count()
+        driver_count = Driver.query.count()
+    except Exception as e:
+        hospital_count = 0
+        driver_count = 0
+        
+    return {
+        "message": "Ambulance Booking API",
+        "statistics": {
+            "total_hospitals": hospital_count,
+            "total_drivers": driver_count,
+            "total_organizations": hospital_count
+        },
+        "endpoints": {
+            "Health Routes": {
+                "GET /api/health": "Check server and database status"
+            },
+            "Hospital Routes": {
+                "GET /api/hospitals": "Get list of all hospitals and organizations",
+                "GET /api/hospitals/nearby": "Get nearby hospitals (params: lat, lng, radius)",
+                "POST /api/hospitals/seed": "Populate database with Kolkata hospitals (sample data)"
+            },
+            "OTP Routes": {
+                "POST /api/otp/send": "Send OTP to phone number",
+                "POST /api/otp/verify": "Verify OTP code"
+            },
+            "Auth Routes": {
+                "POST /api/auth/signup": "Send OTP for new user signup",
+                "POST /api/auth/signup/verify": "Verify OTP and create user",
+                "POST /api/auth/login": "Send OTP for existing user login",
+                "POST /api/auth/login/verify": "Verify OTP and authenticate user",
+                "PUT /api/auth/profile": "Update user profile details"
+            },
+            "Driver Routes": {
+                "GET /api/drivers": "Get all drivers from all hospitals with details"
+            }
+        }
+    }
 
 if __name__ == '__main__':
     app.run(debug=True)
