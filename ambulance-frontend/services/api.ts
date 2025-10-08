@@ -32,37 +32,8 @@ export const createBooking = async (bookingData: any) => {
   try {
     const response = await API.post('/api/bookings', bookingData);
     
-    // Initialize PeerPyRTC for realtime updates (optional - don't block booking)
-    const userId = await AsyncStorage.getItem('userId');
-    if (userId) {
-      setTimeout(async () => {
-        try {
-          const { WebRTCConnection } = require('peerpyrtc-client');
-          const rtc = new WebRTCConnection(`hospital_${bookingData.hospital_id}`, { 
-            peerId: `user_${userId}`,
-            debug: true 
-          });
-          
-          rtc.onOpen = () => {
-            console.log('✅ PeerPyRTC: Connected, sending booking update');
-            rtc.emit('booking_update', {
-              booking_id: response.data.booking_id,
-              ...bookingData,
-              status: 'created'
-            });
-          };
-          
-          rtc.onError = (error) => {
-            console.error('❌ PeerPyRTC Error:', error);
-          };
-          
-          await rtc.connect();
-          (global as any).peerpyrtcClient = rtc;
-        } catch (error) {
-          console.error('❌ PeerPyRTC initialization failed (non-blocking):', error);
-        }
-      }, 100);
-    }
+    // Note: WebRTC not supported in React Native - using polling for updates instead
+    console.log('✅ Booking created successfully - using polling for real-time updates');
     
     return response.data;
   } catch (error: any) {

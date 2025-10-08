@@ -61,39 +61,8 @@ const LiveTrackingScreen = () => {
   }, []);
 
   const initializeWebRTC = async () => {
-    try {
-      const { WebRTCConnection } = require('peerpyrtc-client');
-      const userId = await AsyncStorage.getItem('userId');
-      
-      if (userId && bookingData.hospital_id) {
-        const rtc = new WebRTCConnection(`hospital_${bookingData.hospital_id}`, {
-          peerId: `user_${userId}`,
-          debug: true
-        });
-        
-        rtc.onOpen = () => {
-          console.log('✅ LiveTracking WebRTC Connected');
-        };
-        
-        rtc.onMessage = (senderId, message, event) => {
-          console.log('📨 Received from hospital:', event, message);
-          if (event === 'ambulance_assigned') {
-            setIsAssigned(true);
-            setAssignedDriver(message.driver);
-          }
-        };
-        
-        rtc.onError = (error) => {
-          console.error('❌ LiveTracking WebRTC Error (non-blocking):', error);
-        };
-        
-        await rtc.connect();
-        (global as any).peerpyrtcClient = rtc;
-      }
-    } catch (error) {
-      console.error('WebRTC initialization failed (non-blocking):', error);
-      // Continue without WebRTC - app still works
-    }
+    // WebRTC not supported in React Native - using polling instead
+    console.log('ℹ️ Using polling for real-time updates (WebRTC not available in React Native)');
   };
 
   const startLocationTracking = async () => {
