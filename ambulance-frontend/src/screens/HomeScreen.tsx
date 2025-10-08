@@ -28,6 +28,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import API from '../../services/api';
 import { useNavigation } from '@react-navigation/native';
+import LocationService from '../../services/locationService';
 
 
 const { width, height } = Dimensions.get('window');
@@ -94,41 +95,61 @@ const HomeScreen = () => {
     setAddress(fetchedAddress);
     setUserLocation(location);
     
-    // Fetch nearby hospitals and ambulances
+    // Fetch nearby hospitals using current location
     await fetchNearbyServices(location.latitude, location.longitude, searchRadius);
     
-    // Show main screen after a short delay
     setTimeout(() => {
       setIsLoading(false);
     }, 500);
+  };
+
+  // Get current location for nearby hospitals (one-time request)
+  const updateLocationForHospitals = async () => {
+    const location = await LocationService.getCurrentLocation();
+    if (location) {
+      const newLocation = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      };
+      setUserLocation(newLocation);
+      await fetchNearbyServices(newLocation.latitude, newLocation.longitude, searchRadius);
+    }
   };
   
   // Fetch nearby hospitals and ambulances from API
   const fetchNearbyServices = async (lat: number, lng: number, radius: number = searchRadius) => {
     try {
-      // Try to fetch from API - replace with actual endpoints
-      const [hospitalsResponse, ambulancesResponse] = await Promise.allSettled([
-        fetch(`https://ambulance-booking-roan.vercel.app/api/hospitals/nearby?lat=${lat}&lng=${lng}&radius=${radius}`).then(r => r.json()),
-        fetch(`https://ambulance-booking-roan.vercel.app/api/ambulances/nearby?lat=${lat}&lng=${lng}&radius=${radius}`).then(r => r.json())
-      ]);
+      console.log(`Fetching hospitals near ${lat}, ${lng} within ${radius}km`);
       
-      // Set hospital data if API succeeds
-      if (hospitalsResponse.status === 'fulfilled' && hospitalsResponse.value.hospitals) {
-        setHospitalData(hospitalsResponse.value.hospitals);
-        setFilteredHospitals(hospitalsResponse.value.hospitals);
+      // Fetch hospitals from API
+      const hospitalsResponse = await fetch(
+        `https://ambulance-booking-roan.vercel.app/api/hospitals/nearby?lat=${lat}&lng=${lng}&radius=${radius}`
+      );
+      
+      if (hospitalsResponse.ok) {
+        const hospitalsData = await hospitalsResponse.json();
+        console.log('Hospitals API response:', hospitalsData);
+        
+        if (hospitalsData.hospitals && Array.isArray(hospitalsData.hospitals)) {
+          setHospitalData(hospitalsData.hospitals);
+          setFilteredHospitals(hospitalsData.hospitals);
+          console.log(`Found ${hospitalsData.hospitals.length} nearby hospitals`);
+        } else {
+          console.log('No hospitals found in response');
+          setHospitalData([]);
+          setFilteredHospitals([]);
+        }
       } else {
+        console.error('Hospitals API failed:', hospitalsResponse.status);
         setHospitalData([]);
         setFilteredHospitals([]);
       }
       
-      // Set ambulance data if API succeeds
-      if (ambulancesResponse.status === 'fulfilled' && ambulancesResponse.value.data.ambulances) {
-        setAmbulanceData(ambulancesResponse.value.data.ambulances);
-      } else {
-        setAmbulanceData([]);
-      }
+      // Set empty ambulance data for now (endpoint doesn't exist yet)
+      setAmbulanceData([]);
+      
     } catch (error) {
-      console.log('API not available, no hospitals to show');
+      console.error('Error fetching nearby services:', error);
       setHospitalData([]);
       setFilteredHospitals([]);
       setAmbulanceData([]);
@@ -569,11 +590,13 @@ const HomeScreen = () => {
     logout();
   };
 
-  const snapToCurrentLocation = () => {
+  const snapToCurrentLocation = async () => {
     console.log('Snap button pressed!');
     if (webViewRef.current) {
       webViewRef.current.postMessage('centerOnUser');
     }
+    // Also update location for nearby hospitals
+    await updateLocationForHospitals();
   };
 
   const onPanGestureEvent = (event: any) => {

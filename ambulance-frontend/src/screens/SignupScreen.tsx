@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, StatusBar, LayoutAnimation,
   Platform, UIManager, Alert
 } from 'react-native';
+import * as Location from 'expo-location';
 import BackButton from '../components/BackButton';
 import API  from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -117,11 +118,24 @@ export default function SignupScreen() {
     setLoading(false);
   };
 
-  const handleLocationAccess = (granted: boolean) => {
+  const handleLocationAccess = async (granted: boolean) => {
     if (granted) {
-      nextStep(); // go to address step
+      try {
+        // Only request basic foreground location permission
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          console.log('Location permission granted for emergency use only');
+          nextStep();
+        } else {
+          Alert.alert('Permission Denied', 'Location access is only used during active bookings for ambulance tracking.');
+          nextStep();
+        }
+      } catch (error) {
+        console.error('Error requesting location permission:', error);
+        nextStep();
+      }
     } else {
-      console.log('User skipped location');
+      nextStep();
     }
   };
 
@@ -213,12 +227,13 @@ export default function SignupScreen() {
 
         {step === 4 && (
           <>
-            <Text style={styles.title}>Allow Location Access?</Text>
+            <Text style={styles.title}>Enable Location Services</Text>
+            <Text style={styles.subtitle}>Location is only used during active bookings to help ambulances find you. We don't track you otherwise.</Text>
             <TouchableOpacity style={[styles.button, { backgroundColor: '#000', marginBottom: 20 }]} onPress={() => handleLocationAccess(true)}>
-              <Text style={[styles.buttonText, { color: '#FFF' }]}>Allow</Text>
+              <Text style={[styles.buttonText, { color: '#FFF' }]}>📍 Allow Location Access</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.button, { backgroundColor: '#E0E0E0' }]} onPress={() => handleLocationAccess(false)}>
-              <Text style={[styles.buttonText, { color: '#333' }]}>Skip</Text>
+              <Text style={[styles.buttonText, { color: '#333' }]}>Skip for Now</Text>
             </TouchableOpacity>
           </>
         )}

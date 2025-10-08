@@ -682,6 +682,9 @@ def get_nearby_hospitals():
     lng = request.args.get('lng', type=float)
     radius = request.args.get('radius', 10, type=float)
     
+    if not lat or not lng:
+        return jsonify({"error": "Latitude and longitude are required"}), 400
+    
     hospitals = Hospital.query.all()
     nearby = []
     
@@ -696,10 +699,23 @@ def get_nearby_hospitals():
                 "latitude": h.latitude,
                 "longitude": h.longitude,
                 "type": h.type,
-                "distance": round(distance, 2)
+                "emergency_services": h.emergency_services,
+                "distance": str(round(distance, 2)),
+                "contact_number": h.contact_number
             })
     
-    return jsonify(nearby)
+    # Sort by distance
+    nearby.sort(key=lambda x: float(x['distance']))
+    
+    return jsonify({
+        "hospitals": nearby,
+        "total": len(nearby),
+        "search_params": {
+            "latitude": lat,
+            "longitude": lng,
+            "radius_km": radius
+        }
+    })
 
 @app.route('/api/hospitals/seed', methods=['POST'])
 def seed_hospitals():

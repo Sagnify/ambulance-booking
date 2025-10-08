@@ -17,6 +17,7 @@ import MapViewComponent from '../components/MapView';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import API from '../../services/api';
+import LocationService from '../../services/locationService';
 
 const { width, height } = Dimensions.get('window');
 const API_BASE_URL = 'https://ambulance-booking-roan.vercel.app';
@@ -46,7 +47,25 @@ const LiveTrackingScreen = () => {
 
   useEffect(() => {
     createBooking();
+    startLocationTracking();
+    
+    // Cleanup location tracking when component unmounts
+    return () => {
+      LocationService.stopBookingTracking();
+    };
   }, []);
+
+  const startLocationTracking = async () => {
+    const success = await LocationService.startBookingTracking((location) => {
+      console.log('User location updated during booking:', location.coords);
+      // Update user location for ambulance to track
+      // This location is only tracked during active booking
+    });
+    
+    if (!success) {
+      Alert.alert('Location Access', 'Unable to track your location. Ambulance may have difficulty finding you.');
+    }
+  };
 
   useEffect(() => {
     if (!isAssigned && timeRemaining > 0) {
