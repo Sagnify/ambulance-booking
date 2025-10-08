@@ -456,21 +456,23 @@
                                     <option value="Completed" ${booking.status === 'Completed' ? 'selected' : ''}>✅ Completed</option>
                                 </select>
                             </div>
-                            <div class="flex space-x-2 flex-wrap gap-2">
-                                <button onclick="callPatient('${booking.patient_phone}')" class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600">
-                                    📞 Patient
-                                </button>
-                                <button onclick="callDriver('${booking.ambulance?.driver_phone}')" class="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600">
-                                    📞 Driver
-                                </button>
-                                <button onclick="trackAmbulance(${booking.id})" class="px-3 py-1 text-sm bg-purple-500 text-white rounded hover:bg-purple-600">
-                                    📍 Track
-                                </button>
-                                <button onclick="sendSMS(${booking.id})" class="px-3 py-1 text-sm bg-yellow-500 text-white rounded hover:bg-yellow-600">
-                                    💬 SMS
-                                </button>
-                                <button onclick="cancelBooking(${booking.id})" class="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600">
-                                    ❌ Cancel
+                            <div class="flex justify-between items-center">
+                                <div class="flex space-x-2">
+                                    <button onclick="callPatient('${booking.patient_phone}')" class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors" title="Call Patient">
+                                        Call Patient
+                                    </button>
+                                    <button onclick="callDriver('${booking.ambulance?.driver_phone}')" class="px-3 py-2 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors" title="Call Driver">
+                                        Call Driver
+                                    </button>
+                                    <button onclick="trackAmbulance(${booking.id})" class="px-3 py-2 text-xs bg-violet-600 text-white rounded hover:bg-violet-700 transition-colors" title="Live Track">
+                                        Track
+                                    </button>
+                                    <button onclick="sendSMS(${booking.id})" class="px-3 py-2 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors" title="Send SMS">
+                                        SMS
+                                    </button>
+                                </div>
+                                <button onclick="cancelBooking(${booking.id})" class="px-4 py-2 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors font-medium" title="Cancel Booking">
+                                    Cancel
                                 </button>
                             </div>
                         </div>
