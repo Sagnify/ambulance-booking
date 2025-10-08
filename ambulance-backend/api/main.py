@@ -214,14 +214,17 @@ def hospital_dashboard_data(hospital_id):
         "pending_bookings": _format_pending_bookings(hospital_id, datetime),
         "ongoing_bookings": [{
             "id": b.id,
+            "booking_code": b.booking_code,
             "booking_type": b.booking_type,
             "emergency_type": b.emergency_type,
             "severity": b.severity,
             "pickup_location": b.pickup_location,
             "pickup_latitude": b.pickup_latitude,
             "pickup_longitude": b.pickup_longitude,
-            "patient_name": b.patient_name,
-            "patient_phone": b.patient_phone,
+            "patient_name": b.patient_name or (b.user.name if b.user else 'Unknown'),
+            "patient_phone": b.patient_phone or (b.user.phone_number if b.user else 'Unknown'),
+            "user_name": b.user.name if b.user else 'Unknown',
+            "user_phone": b.user.phone_number if b.user else 'Unknown',
             "status": b.status,
             "assigned_at": b.assigned_at.isoformat() if b.assigned_at else None,
             "auto_assigned": b.auto_assigned,
@@ -521,9 +524,12 @@ def get_booking_status(booking_id):
     
     result = {
         "id": booking.id,
+        "booking_code": booking.booking_code,
         "status": booking.status,
         "booking_type": booking.booking_type,
         "pickup_location": booking.pickup_location,
+        "pickup_latitude": booking.pickup_latitude,
+        "pickup_longitude": booking.pickup_longitude,
         "requested_at": booking.requested_at.isoformat(),
         "auto_assigned": booking.auto_assigned,
         "is_cancelled": booking.status in ['Cancelled', 'Auto-Cancelled'],
@@ -537,6 +543,9 @@ def get_booking_status(booking_id):
                 "driver_name": driver.name,
                 "driver_phone": driver.phone_number,
                 "vehicle_number": driver.vehicle_number,
+                "license_number": driver.license_number,
+                "current_latitude": driver.current_latitude,
+                "current_longitude": driver.current_longitude,
                 "assigned_at": booking.assigned_at.isoformat() if booking.assigned_at else None
             }
     
@@ -943,20 +952,69 @@ def get_driver_bookings():
     result = []
     for booking in bookings:
         hospital = Hospital.query.get(booking.hospital_id)
+        user = booking.user if booking.user else None
+        
         result.append({
             "id": booking.id,
-            "user_phone": booking.patient_phone or booking.user.phone_number if booking.user else 'Unknown',
-            "hospital_id": booking.hospital_id,
-            "driver_id": booking.ambulance_id,
+            "booking_code": booking.booking_code,
+            "booking_type": booking.booking_type,
+            "emergency_type": booking.emergency_type,
+            "severity": booking.severity,
+            "patient_name": booking.patient_name or (user.name if user else 'Unknown Patient'),
+            "patient_phone": booking.patient_phone or (user.phone_number if user else 'Unknown'),
+            "user_name": user.name if user else 'Unknown User',
+            "user_phone": user.phone_number if user else 'Unknown',
+            "user_email": user.email if user else None,
+            "pickup_location": booking.pickup_location,
             "pickup_latitude": booking.pickup_latitude,
             "pickup_longitude": booking.pickup_longitude,
+            "destination": booking.destination,
             "status": booking.status,
-            "created_at": booking.requested_at.isoformat(),
+            "requested_at": booking.requested_at.isoformat(),
+            "assigned_at": booking.assigned_at.isoformat() if booking.assigned_at else None,
+            "auto_assigned": booking.auto_assigned,
+            "hospital_id": booking.hospital_id,
             "hospital_name": hospital.name if hospital else None,
-            "hospital_address": hospital.address if hospital else None
+            "hospital_address": hospital.address if hospital else None,
+            "hospital_contact": hospital.contact_number if hospital else None,
+            "hospital_latitude": hospital.latitude if hospital else None,
+            "hospital_longitude": hospital.longitude if hospital else None
         })
     
     return jsonify(result)
+
+@app.route('/api/bookings/<int:booking_id>/driver-location')
+def get_driver_location(booking_id):
+    from .models import Booking, Driver
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
+    
+    try:
+        verify_jwt_in_request()
+        current_user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        
+        if claims.get('user_type') == 'driver':
+            return jsonify({"error": "Invalid token type"}), 403
+            
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
+    
+    booking = Booking.query.filter_by(id=booking_id, user_id=current_user_id).first()
+    if not booking:
+        return jsonify({"error": "Booking not found or unauthorized"}), 404
+    
+    if not booking.ambulance_id:
+        return jsonify({"error": "No driver assigned yet"}), 404
+    
+    driver = Driver.query.get(booking.ambulance_id)
+    if not driver:
+        return jsonify({"error": "Driver not found"}), 404
+    
+    return jsonify({
+        "driver_latitude": driver.current_latitude,
+        "driver_longitude": driver.current_longitude,
+        "last_updated": datetime.utcnow().isoformat()
+    })
 
 @app.route('/booking/status', methods=['POST'])
 def update_booking_status():

@@ -8,8 +8,10 @@ import {
   Alert,
   RefreshControl,
   Switch,
+  Linking,
+  Platform,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { driverAPI } from '../services/api';
@@ -20,6 +22,7 @@ import ProfileModal from '../components/ProfileModal';
 const HomeScreen: React.FC = () => {
   const { driver } = useAuth();
   const { theme } = useTheme();
+  const navigation = useNavigation();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAvailable, setIsAvailable] = useState(driver?.is_available || false);
@@ -99,49 +102,158 @@ const HomeScreen: React.FC = () => {
     }
   };
 
+  const openGoogleMaps = (latitude: number, longitude: number, label: string) => {
+    const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
+    const latLng = `${latitude},${longitude}`;
+    const url = Platform.select({
+      ios: `maps://?q=${label}&ll=${latLng}`,
+      android: `geo:${latLng}?q=${latLng}(${label})`
+    });
+    
+    Linking.openURL(url || `https://www.google.com/maps/search/?api=1&query=${latLng}`);
+  };
+
+  const getNavigationDestination = (booking: Booking) => {
+    if (booking.status === 'Assigned' || booking.status === 'On Route') {
+      return {
+        latitude: booking.pickup_latitude,
+        longitude: booking.pickup_longitude,
+        label: 'Patient Pickup Location'
+      };
+    } else if (booking.status === 'Arrived') {
+      return {
+        latitude: booking.hospital_latitude || 0,
+        longitude: booking.hospital_longitude || 0,
+        label: booking.hospital_name || 'Hospital'
+      };
+    }
+    return null;
+  };
+
 
 
   const renderBookingItem = ({ item }: { item: Booking }) => (
     <View style={[styles.bookingCard, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
+      {/* Header with booking code and type */}
       <View style={styles.bookingHeader}>
-        <Text style={[styles.bookingId, { color: theme.text }]}>Booking #{item.id}</Text>
+        <View style={styles.bookingTitleRow}>
+          <Text style={[styles.bookingCode, { color: theme.text }]}>#{item.booking_code || item.id}</Text>
+          <View style={[styles.typeBadge, { backgroundColor: getTypeColor(item.booking_type) }]}>
+            <Text style={styles.typeBadgeText}>{item.booking_type?.toUpperCase() || 'REGULAR'}</Text>
+          </View>
+        </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
         </View>
       </View>
 
-      <View style={styles.bookingDetails}>
-        <Text style={[styles.detailText, { color: theme.textSecondary }]}>📞 {item.user_phone}</Text>
-        <Text style={[styles.detailText, { color: theme.textSecondary }]}>🏥 {item.hospital_name}</Text>
-        <Text style={[styles.detailText, { color: theme.textSecondary }]}>📍 Pickup: {item.pickup_latitude.toFixed(4)}, {item.pickup_longitude.toFixed(4)}</Text>
-        <Text style={[styles.detailText, { color: theme.textSecondary }]}>🕒 {new Date(item.created_at).toLocaleString()}</Text>
+      {/* Patient Information */}
+      <View style={styles.patientSection}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>PATIENT INFO</Text>
+        <View style={styles.patientRow}>
+          <Text style={[styles.patientName, { color: theme.text }]}>👤 {item.patient_name || item.user_name || 'Unknown Patient'}</Text>
+          <TouchableOpacity style={styles.callButton} onPress={() => Linking.openURL(`tel:${item.patient_phone || item.user_phone}`)}>
+            <Text style={styles.callButtonText}>📞</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={[styles.patientPhone, { color: theme.textSecondary }]}>{item.patient_phone || item.user_phone}</Text>
+        {item.user_name && item.user_name !== item.patient_name && (
+          <Text style={[styles.userInfo, { color: theme.textSecondary }]}>📱 Booked by: {item.user_name} ({item.user_phone})</Text>
+        )}
+        {item.emergency_type && (
+          <Text style={[styles.emergencyType, { color: '#FF3B30' }]}>⚠️ {item.emergency_type}</Text>
+        )}
+        {item.severity && (
+          <Text style={[styles.severity, { color: getSeverityColor(item.severity) }]}>🔥 Severity: {item.severity}</Text>
+        )}
       </View>
 
-      <View style={styles.actionButtons}>
-        {item.status === 'assigned' && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton]}
-            onPress={() => handleBookingAction(item.id, 'en_route')}
-          >
-            <Text style={styles.actionButtonText}>Start Journey</Text>
+      {/* Location Information */}
+      <View style={styles.locationSection}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>PICKUP LOCATION</Text>
+        <Text style={[styles.pickupLocation, { color: theme.text }]}>📍 {item.pickup_location || 'Location not specified'}</Text>
+        {item.pickup_latitude && item.pickup_longitude && (
+          <TouchableOpacity onPress={() => Alert.alert('Coordinates', `${item.pickup_latitude.toFixed(6)}, ${item.pickup_longitude.toFixed(6)}`)}>
+            <Text style={[styles.coordinates, { color: theme.primary }]}>📌 View Coordinates</Text>
           </TouchableOpacity>
         )}
+        {item.destination && (
+          <Text style={[styles.destination, { color: theme.textSecondary }]}>🏥 To: {item.destination}</Text>
+        )}
+      </View>
+
+      {/* Hospital Information */}
+      <View style={styles.hospitalSection}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>HOSPITAL</Text>
+        <Text style={[styles.hospitalName, { color: theme.text }]}>🏥 {item.hospital_name}</Text>
+        {item.hospital_address && (
+          <Text style={[styles.hospitalAddress, { color: theme.textSecondary }]}>{item.hospital_address}</Text>
+        )}
+        {item.hospital_contact && (
+          <TouchableOpacity onPress={() => Alert.alert('Call Hospital', `Call ${item.hospital_contact}`)}>
+            <Text style={[styles.hospitalContact, { color: theme.primary }]}>📞 {item.hospital_contact}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Timing Information */}
+      <View style={styles.timingSection}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>TIMING</Text>
+        <Text style={[styles.requestedTime, { color: theme.textSecondary }]}>🕒 Requested: {new Date(item.requested_at).toLocaleString()}</Text>
+        {item.assigned_at && (
+          <Text style={[styles.assignedTime, { color: theme.textSecondary }]}>✅ Assigned: {new Date(item.assigned_at).toLocaleString()}</Text>
+        )}
+        {item.auto_assigned && (
+          <Text style={[styles.autoAssigned, { color: '#FF9500' }]}>🤖 Auto-assigned</Text>
+        )}
+      </View>
+
+      {/* Navigation and Action Buttons */}
+      <View style={styles.actionButtons}>
+        {(item.status === 'Assigned' || item.status === 'On Route' || item.status === 'Arrived') && (() => {
+          const destination = getNavigationDestination(item);
+          return destination && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.navigateButton]}
+              onPress={() => openGoogleMaps(destination.latitude, destination.longitude, destination.label)}
+            >
+              <Text style={styles.actionButtonText}>🗺️ Navigate</Text>
+            </TouchableOpacity>
+          );
+        })()}
         
-        {item.status === 'en_route' && (
+        {item.status === 'Assigned' && (
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.startButton]}
+              onPress={() => handleBookingAction(item.id, 'On Route')}
+            >
+              <Text style={styles.actionButtonText}>🚗 Start Journey</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.floatingNavButton]}
+              onPress={() => navigation.navigate('Navigation' as never, { booking: item } as never)}
+            >
+              <Text style={styles.actionButtonText}>🌍 Floating Nav</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        
+        {item.status === 'On Route' && (
           <TouchableOpacity
             style={[styles.actionButton, styles.arrivedButton]}
-            onPress={() => handleBookingAction(item.id, 'arrived')}
+            onPress={() => handleBookingAction(item.id, 'Arrived')}
           >
-            <Text style={styles.actionButtonText}>Mark Arrived</Text>
+            <Text style={styles.actionButtonText}>📍 Mark Arrived</Text>
           </TouchableOpacity>
         )}
         
-        {item.status === 'arrived' && (
+        {item.status === 'Arrived' && (
           <TouchableOpacity
             style={[styles.actionButton, styles.completeButton]}
-            onPress={() => handleBookingAction(item.id, 'completed')}
+            onPress={() => handleBookingAction(item.id, 'Completed')}
           >
-            <Text style={styles.actionButtonText}>Complete</Text>
+            <Text style={styles.actionButtonText}>✅ Complete Pickup</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -149,11 +261,30 @@ const HomeScreen: React.FC = () => {
   );
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'assigned': return '#FF9500';
-      case 'en_route': return '#007AFF';
+      case 'on route': return '#007AFF';
       case 'arrived': return '#34C759';
       case 'completed': return '#8E8E93';
+      default: return '#8E8E93';
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case 'emergency': return '#FF3B30';
+      case 'accident': return '#FF9500';
+      case 'regular': return '#007AFF';
+      default: return '#8E8E93';
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity?.toLowerCase()) {
+      case 'critical': return '#FF3B30';
+      case 'high': return '#FF9500';
+      case 'medium': return '#FFCC00';
+      case 'low': return '#34C759';
       default: return '#8E8E93';
     }
   };
@@ -280,62 +411,193 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   bookingCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   bookingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
-  bookingId: {
-    fontSize: 18,
+  bookingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bookingCode: {
+    fontSize: 20,
     fontWeight: 'bold',
   },
-  statusBadge: {
+  typeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 12,
+  },
+  typeBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   statusText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
   },
-  bookingDetails: {
+  
+  // Section styles
+  patientSection: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E7',
+  },
+  locationSection: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E7',
+  },
+  hospitalSection: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E7',
+  },
+  timingSection: {
     marginBottom: 16,
   },
-  detailText: {
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  
+  // Patient info styles
+  patientRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  patientName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  callButton: {
+    backgroundColor: '#34C759',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callButtonText: {
+    fontSize: 16,
+  },
+  patientPhone: {
     fontSize: 14,
     marginBottom: 4,
   },
+  emergencyType: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  severity: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  userInfo: {
+    fontSize: 12,
+    marginBottom: 4,
+    fontStyle: 'italic',
+  },
+  
+  // Location styles
+  pickupLocation: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  coordinates: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  destination: {
+    fontSize: 14,
+  },
+  
+  // Hospital styles
+  hospitalName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  hospitalAddress: {
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  hospitalContact: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  
+  // Timing styles
+  requestedTime: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  assignedTime: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  autoAssigned: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  
+  // Action button styles
   actionButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  acceptButton: {
+  navigateButton: {
+    backgroundColor: '#5856D6',
+  },
+  startButton: {
     backgroundColor: '#007AFF',
   },
   arrivedButton: {
     backgroundColor: '#34C759',
   },
   completeButton: {
-    backgroundColor: '#8E8E93',
+    backgroundColor: '#FF9500',
+  },
+  floatingNavButton: {
+    backgroundColor: '#AF52DE',
   },
   actionButtonText: {
     color: '#fff',
+    fontSize: 15,
     fontWeight: '600',
   },
   emptyState: {

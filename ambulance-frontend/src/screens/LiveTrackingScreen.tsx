@@ -91,13 +91,41 @@ const LiveTrackingScreen = () => {
 
   const startPolling = () => {
     // Poll for booking status updates every 3 seconds
-    const pollInterval = setInterval(() => {
-      if (booking && !isAssigned && !isCancelled) {
+    const statusInterval = setInterval(() => {
+      if (booking && !isCancelled) {
         checkBookingStatus();
       }
     }, 3000);
     
-    return () => clearInterval(pollInterval);
+    // Poll for driver location every 5 seconds when assigned
+    const locationInterval = setInterval(() => {
+      if (booking && isAssigned && !isCancelled) {
+        updateDriverLocation();
+      }
+    }, 5000);
+    
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(locationInterval);
+    };
+  };
+  
+  const updateDriverLocation = async () => {
+    if (!booking) return;
+    
+    try {
+      const response = await API.get(`/api/bookings/${booking.booking_id}/driver-location`);
+      const result = response.data;
+      
+      if (result.driver_latitude && result.driver_longitude) {
+        setAmbulanceLocation({
+          latitude: result.driver_latitude,
+          longitude: result.driver_longitude
+        });
+      }
+    } catch (error) {
+      console.log('Failed to get driver location:', error);
+    }
   };
 
   const startLocationTracking = async () => {
@@ -185,15 +213,18 @@ const LiveTrackingScreen = () => {
             [{ text: 'OK', onPress: () => navigation.goBack() }]
           );
         }
-      } else if (result.status === 'Assigned' && result.ambulance) {
+      } else if (['Assigned', 'On Route', 'Arrived'].includes(result.status) && result.ambulance) {
         setIsAssigned(true);
         setAssignedDriver(result.ambulance);
-        setAmbulanceLocation({
-          latitude: userLocation.latitude + 0.01,
-          longitude: userLocation.longitude + 0.01
-        });
+        // Use real driver location from database
+        if (result.ambulance.current_latitude && result.ambulance.current_longitude) {
+          setAmbulanceLocation({
+            latitude: result.ambulance.current_latitude,
+            longitude: result.ambulance.current_longitude
+          });
+        }
         
-        // Update ongoing booking with assignment info
+        // Update ongoing booking with current status
         setOngoingBooking({
           booking_id: booking.booking_id,
           booking_code: booking.booking_code,
@@ -206,6 +237,9 @@ const LiveTrackingScreen = () => {
         });
       } else if (result.status === 'Completed') {
         setOngoingBooking(null); // Clear completed booking
+        Alert.alert('Pickup Completed', 'Your ambulance pickup has been completed successfully.', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
       }
     } catch (error) {
       console.log('Status check failed, booking may not exist in backend');
@@ -222,23 +256,18 @@ const LiveTrackingScreen = () => {
       if (result.driver) {
         setIsAssigned(true);
         setAssignedDriver(result.driver);
-        setAmbulanceLocation({
-          latitude: userLocation.latitude + 0.01,
-          longitude: userLocation.longitude + 0.01
-        });
+        // Use real driver location if available
+        if (result.driver.current_latitude && result.driver.current_longitude) {
+          setAmbulanceLocation({
+            latitude: result.driver.current_latitude,
+            longitude: result.driver.current_longitude
+          });
+        }
       }
     } catch (error) {
       console.error('Auto-assignment API error:', error);
-      // Fallback: simulate assignment for demo
-      setIsAssigned(true);
-      setAssignedDriver({
-        driver_name: 'Demo Driver',
-        vehicle_number: 'AMB-001'
-      });
-      setAmbulanceLocation({
-        latitude: userLocation.latitude + 0.01,
-        longitude: userLocation.longitude + 0.01
-      });
+      // No fallback - only use real data from database
+      console.log('No available driver for auto-assignment');
     }
   };
 

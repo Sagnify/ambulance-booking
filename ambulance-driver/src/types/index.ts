@@ -11,15 +11,31 @@ export interface Driver {
 
 export interface Booking {
   id: number;
+  booking_code?: string;
+  booking_type?: string;
+  emergency_type?: string;
+  severity?: string;
+  patient_name?: string;
+  patient_phone?: string;
   user_phone: string;
-  hospital_id: number;
-  driver_id: number;
+  user_name?: string;
+  user_email?: string;
+  pickup_location?: string;
   pickup_latitude: number;
   pickup_longitude: number;
-  status: 'pending' | 'assigned' | 'en_route' | 'arrived' | 'completed' | 'cancelled';
+  destination?: string;
+  hospital_id: number;
+  driver_id: number;
+  status: 'pending' | 'assigned' | 'en_route' | 'arrived' | 'completed' | 'cancelled' | 'Assigned' | 'On Route' | 'Arrived' | 'Completed';
+  requested_at: string;
   created_at: string;
+  assigned_at?: string;
+  auto_assigned?: boolean;
   hospital_name?: string;
   hospital_address?: string;
+  hospital_contact?: string;
+  hospital_latitude?: number;
+  hospital_longitude?: number;
 }
 
 export interface Hospital {
