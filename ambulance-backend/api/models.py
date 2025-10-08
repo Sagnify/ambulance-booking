@@ -73,6 +73,9 @@ class Booking(db.Model, TimestampMixin):
     assigned_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     auto_assigned = db.Column(db.Boolean, default=False, nullable=False)
+    ambulance_latitude = db.Column(db.Float, nullable=True)
+    ambulance_longitude = db.Column(db.Float, nullable=True)
+    ambulance_location_updated_at = db.Column(db.DateTime, nullable=True)
     
     user = db.relationship('User', back_populates='bookings')
     hospital = db.relationship('Hospital')

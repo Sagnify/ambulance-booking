@@ -57,8 +57,8 @@ const LiveTrackingScreen = () => {
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(
     ongoingBooking?.ambulance && bookingData.booking_code ? ongoingBooking.ambulance : null
   );
-  const [userLocation] = useState({ latitude: 22.4675, longitude: 88.3732 });
-  const [hospitalLocation] = useState({ latitude: 22.4775, longitude: 88.3832 });
+  const [userLocation, setUserLocation] = useState({ latitude: 22.4675, longitude: 88.3732 });
+  const [hospitalLocation, setHospitalLocation] = useState({ latitude: 22.4775, longitude: 88.3832 });
   const panelHeight = useRef(new Animated.Value(height * 0.4)).current;
   const [panelPosition, setPanelPosition] = useState(height * 0.4);
 
@@ -131,8 +131,11 @@ const LiveTrackingScreen = () => {
   const startLocationTracking = async () => {
     const success = await LocationService.startBookingTracking((location) => {
       console.log('User location updated during booking:', location.coords);
-      // Update user location for ambulance to track
-      // This location is only tracked during active booking
+      // Update user location on map in real-time
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      });
     });
     
     if (!success) {
@@ -235,6 +238,14 @@ const LiveTrackingScreen = () => {
           is_cancelled: false,
           ambulance: result.ambulance
         });
+        
+        // Update hospital location if available
+        if (result.hospital_latitude && result.hospital_longitude) {
+          setHospitalLocation({
+            latitude: result.hospital_latitude,
+            longitude: result.hospital_longitude
+          });
+        }
       } else if (result.status === 'Completed') {
         setOngoingBooking(null); // Clear completed booking
         Alert.alert('Pickup Completed', 'Your ambulance pickup has been completed successfully.', [
@@ -436,23 +447,27 @@ const LiveTrackingScreen = () => {
                 </View>
               </View>
               
-              <View style={[styles.stepLine, { backgroundColor: '#E5E7EB' }]} />
+              <View style={[styles.stepLine, { backgroundColor: ongoingBooking?.status === 'On Route' || ongoingBooking?.status === 'Arrived' ? '#10B981' : '#E5E7EB' }]} />
               
               <View style={styles.stepItem}>
-                <View style={[styles.stepDot, { backgroundColor: '#E5E7EB' }]} />
+                <View style={[styles.stepDot, { backgroundColor: ongoingBooking?.status === 'On Route' || ongoingBooking?.status === 'Arrived' ? '#10B981' : '#E5E7EB' }]} />
                 <View style={styles.stepContent}>
-                  <Text style={[styles.stepTitle, { color: colors.textSecondary }]}>On the Way</Text>
-                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>Pending</Text>
+                  <Text style={[styles.stepTitle, { color: ongoingBooking?.status === 'On Route' || ongoingBooking?.status === 'Arrived' ? colors.text : colors.textSecondary }]}>On the Way</Text>
+                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>
+                    {ongoingBooking?.status === 'On Route' ? 'Driver is on the way' : ongoingBooking?.status === 'Arrived' ? 'Completed' : 'Pending'}
+                  </Text>
                 </View>
               </View>
               
-              <View style={[styles.stepLine, { backgroundColor: '#E5E7EB' }]} />
+              <View style={[styles.stepLine, { backgroundColor: ongoingBooking?.status === 'Arrived' ? '#10B981' : '#E5E7EB' }]} />
               
               <View style={styles.stepItem}>
-                <View style={[styles.stepDot, { backgroundColor: '#E5E7EB' }]} />
+                <View style={[styles.stepDot, { backgroundColor: ongoingBooking?.status === 'Arrived' ? '#10B981' : '#E5E7EB' }]} />
                 <View style={styles.stepContent}>
-                  <Text style={[styles.stepTitle, { color: colors.textSecondary }]}>Arrived</Text>
-                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>Pending</Text>
+                  <Text style={[styles.stepTitle, { color: ongoingBooking?.status === 'Arrived' ? colors.text : colors.textSecondary }]}>Arrived</Text>
+                  <Text style={[styles.stepTime, { color: colors.textSecondary }]}>
+                    {ongoingBooking?.status === 'Arrived' ? 'Driver has arrived' : 'Pending'}
+                  </Text>
                 </View>
               </View>
             </View>

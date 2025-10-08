@@ -21,23 +21,21 @@ except ImportError:
 @app.route('/api/migrate', methods=['GET', 'POST'])
 def migrate_database():
     try:
-        # Only add missing booking_code column without dropping data
         from sqlalchemy import text
+        import secrets
+        from .models import Booking
         
-        # Check if booking_code column exists (PostgreSQL)
+        migrations_applied = []
+        
+        # Check and add booking_code column
         result = db.session.execute(text(
             "SELECT column_name FROM information_schema.columns WHERE table_name='bookings' AND column_name='booking_code'"
         ))
-        column_exists = result.fetchone() is not None
-        
-        if not column_exists:
-            # Add the missing column
+        if not result.fetchone():
             db.session.execute(text("ALTER TABLE bookings ADD COLUMN booking_code VARCHAR(8)"))
+            migrations_applied.append("Added booking_code column")
             
-            # Generate booking codes for existing bookings
-            import secrets
-            from .models import Booking
-            
+            # Generate codes for existing bookings
             existing_bookings = Booking.query.filter_by(booking_code=None).all()
             for booking in existing_bookings:
                 while True:
@@ -45,11 +43,29 @@ def migrate_database():
                     if not Booking.query.filter_by(booking_code=code).first():
                         booking.booking_code = code
                         break
-            
+            migrations_applied.append(f"Generated codes for {len(existing_bookings)} existing bookings")
+        
+        # Check and add ambulance location columns
+        ambulance_columns = [
+            ('ambulance_latitude', 'FLOAT'),
+            ('ambulance_longitude', 'FLOAT'),
+            ('ambulance_location_updated_at', 'TIMESTAMP')
+        ]
+        
+        for column_name, column_type in ambulance_columns:
+            result = db.session.execute(text(
+                f"SELECT column_name FROM information_schema.columns WHERE table_name='bookings' AND column_name='{column_name}'"
+            ))
+            if not result.fetchone():
+                db.session.execute(text(f"ALTER TABLE bookings ADD COLUMN {column_name} {column_type}"))
+                migrations_applied.append(f"Added {column_name} column")
+        
+        if migrations_applied:
             db.session.commit()
             return jsonify({
                 "status": "success",
-                "message": "Added booking_code column and updated existing records"
+                "message": "Migration completed",
+                "applied": migrations_applied
             })
         else:
             return jsonify({
@@ -887,8 +903,9 @@ def driver_login():
 
 @app.route('/driver/location', methods=['POST'])
 def update_driver_location():
-    from .models import Driver
+    from .models import Driver, Booking
     from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
+    from datetime import datetime
     
     try:
         verify_jwt_in_request()
@@ -922,6 +939,17 @@ def update_driver_location():
         
         driver.current_latitude = latitude
         driver.current_longitude = longitude
+        
+        # Update ambulance location in active bookings
+        active_booking = Booking.query.filter_by(
+            ambulance_id=current_driver_id
+        ).filter(Booking.status.in_(['Assigned', 'On Route', 'Arrived'])).first()
+        
+        if active_booking:
+            active_booking.ambulance_latitude = latitude
+            active_booking.ambulance_longitude = longitude
+            active_booking.ambulance_location_updated_at = datetime.utcnow()
+        
         db.session.commit()
         
         return jsonify({"message": "Location updated successfully"})
@@ -1010,11 +1038,19 @@ def get_driver_location(booking_id):
     if not driver:
         return jsonify({"error": "Driver not found"}), 404
     
-    return jsonify({
-        "driver_latitude": driver.current_latitude,
-        "driver_longitude": driver.current_longitude,
-        "last_updated": datetime.utcnow().isoformat()
-    })
+    # Get location from booking table for better accuracy
+    if booking.ambulance_latitude and booking.ambulance_longitude:
+        return jsonify({
+            "driver_latitude": booking.ambulance_latitude,
+            "driver_longitude": booking.ambulance_longitude,
+            "last_updated": booking.ambulance_location_updated_at.isoformat() if booking.ambulance_location_updated_at else datetime.utcnow().isoformat()
+        })
+    else:
+        return jsonify({
+            "driver_latitude": driver.current_latitude,
+            "driver_longitude": driver.current_longitude,
+            "last_updated": datetime.utcnow().isoformat()
+        })
 
 @app.route('/booking/status', methods=['POST'])
 def update_booking_status():

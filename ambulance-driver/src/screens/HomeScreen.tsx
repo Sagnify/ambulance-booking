@@ -30,8 +30,10 @@ const HomeScreen: React.FC = () => {
   const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
-    initializeLocation();
-  }, []);
+    if (driver) {
+      initializeLocation();
+    }
+  }, [driver]);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,6 +42,11 @@ const HomeScreen: React.FC = () => {
       }
     }, [driver])
   );
+
+  // Don't render anything if no driver is authenticated
+  if (!driver) {
+    return null;
+  }
 
   const initializeLocation = async () => {
     try {
@@ -60,7 +67,13 @@ const HomeScreen: React.FC = () => {
       locationService.watchLocation(async (newLocation) => {
         setCurrentLocation(newLocation);
         if (driver) {
-          await driverAPI.updateLocation(newLocation.latitude, newLocation.longitude);
+          try {
+            await driverAPI.updateLocation(newLocation.latitude, newLocation.longitude);
+          } catch (error: any) {
+            if (error.response?.status === 401) {
+              console.log('Authentication failed during location update');
+            }
+          }
         }
       });
     } catch (error) {
@@ -75,8 +88,11 @@ const HomeScreen: React.FC = () => {
     try {
       const assignedBookings = await driverAPI.getAssignedBookings();
       setBookings(assignedBookings);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching bookings:', error);
+      if (error.response?.status === 401) {
+        console.log('Authentication failed, user needs to login again');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -232,9 +248,14 @@ const HomeScreen: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.floatingNavButton]}
-              onPress={() => navigation.navigate('Navigation' as never, { booking: item } as never)}
+              onPress={() => {
+                const destination = getNavigationDestination(item);
+                if (destination) {
+                  openGoogleMaps(destination.latitude, destination.longitude, destination.label);
+                }
+              }}
             >
-              <Text style={styles.actionButtonText}>🌍 Floating Nav</Text>
+              <Text style={styles.actionButtonText}>🗺️ Open Maps</Text>
             </TouchableOpacity>
           </>
         )}

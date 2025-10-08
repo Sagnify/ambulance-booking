@@ -23,8 +23,10 @@ const NavigationScreen: React.FC = () => {
   const [appState, setAppState] = useState(AppState.currentState);
 
   useEffect(() => {
-    // Open Google Maps immediately
-    openGoogleMaps();
+    // Open Google Maps after a short delay
+    const timer = setTimeout(() => {
+      openGoogleMaps();
+    }, 1000);
     
     // Listen for app state changes
     const subscription = AppState.addEventListener('change', setAppState);
@@ -33,6 +35,7 @@ const NavigationScreen: React.FC = () => {
     const pollInterval = setInterval(fetchBookingUpdate, 5000);
     
     return () => {
+      clearTimeout(timer);
       subscription?.remove();
       clearInterval(pollInterval);
     };
@@ -116,7 +119,7 @@ const NavigationScreen: React.FC = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <FloatingBookingWidget
         booking={booking}
         onStatusUpdate={handleStatusUpdate}
@@ -129,6 +132,12 @@ const NavigationScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    pointerEvents: 'box-none',
   },
 });
 
