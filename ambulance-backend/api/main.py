@@ -8,19 +8,7 @@ from api.scheduler import start_scheduler
 app = create_app()
 CORS(app)
 
-# Register webrtc blueprint that's not in __init__.py
-try:
-    from api.webrtc_signaling import webrtc_bp
-    app.register_blueprint(webrtc_bp)
-except ImportError:
-    pass
 
-# Register PeerPyRTC service
-try:
-    from api.peerpyrtc_service import peerpyrtc_bp
-    app.register_blueprint(peerpyrtc_bp)
-except ImportError:
-    pass
 
 # Register feature check service
 try:
@@ -133,9 +121,7 @@ def dashboard():
 def dashboard_login():
     return render_template('login.html')
 
-@app.route('/webrtc-dashboard')
-def webrtc_dashboard():
-    return render_template('webrtc-hospital.html')
+
 
 # Hospital Login API
 @app.route('/api/hospital/login', methods=['POST'])
@@ -1342,15 +1328,10 @@ def api_list():
                 "POST /send-otp": "Send OTP to phone number",
                 "POST /verify-otp": "Verify OTP code"
             },
-            "WebRTC Signaling": {
-                "POST /webrtc/offer": "WebRTC offer signaling",
-                "POST /webrtc/candidate": "WebRTC candidate signaling",
-                "POST /webrtc/leave": "Leave WebRTC room"
-            },
+
             "Dashboard Pages": {
                 "GET /dashboard": "Hospital dashboard page",
-                "GET /dashboard/login": "Hospital login page",
-                "GET /webrtc-dashboard": "WebRTC hospital dashboard"
+                "GET /dashboard/login": "Hospital login page"
             },
             "Driver Routes": {
                 "GET /api/drivers": "Get all drivers from all hospitals"
@@ -1379,7 +1360,7 @@ def api_list():
             "JWT": "Tokens expire in 30 days",
             "Phone_Format": "Accepts international formats, cleaned automatically",
             "Driver_Login": "Supports both login_id/password and phone/OTP methods",
-            "WebRTC": "Uses PeerPyRTC for real-time communication"
+            "Real_Time": "Uses polling for real-time updates"
         }
     }
 

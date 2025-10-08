@@ -636,46 +636,35 @@
             window.location.href = '/dashboard/login';
         });
         
-        // WebRTC Connection for real-time updates
-        let hospitalWebRTC = null;
+        // Polling for real-time updates
+        let pollingInterval = null;
         
-        async function initializeWebRTC() {
-            try {
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/peerpyrtc-client/dist/peerpyrtc.umd.js';
-                script.onload = async () => {
-                    const { WebRTCConnection } = window.WebRTCConnection;
-                    hospitalWebRTC = new WebRTCConnection(`hospital_${hospitalId}`, {
-                        peerId: `hospital_dashboard_${hospitalId}`,
-                        debug: true
-                    });
-                    
-                    hospitalWebRTC.onMessage = (senderId, message, event) => {
-                        console.log('🏥 Hospital received:', event, message);
-                        if (event === 'booking_update') {
-                            loadHospitalData(); // Refresh dashboard when booking updates
-                        }
-                    };
-                    
-                    hospitalWebRTC.onOpen = () => {
-                        console.log('✅ Hospital WebRTC Connected');
-                    };
-                    
-                    hospitalWebRTC.onError = (error) => {
-                        console.error('❌ Hospital WebRTC Error:', error);
-                    };
-                    
-                    await hospitalWebRTC.connect();
-                };
-                document.head.appendChild(script);
-            } catch (error) {
-                console.error('WebRTC initialization failed:', error);
+        function startPolling() {
+            // Poll every 3 seconds for real-time updates
+            pollingInterval = setInterval(() => {
+                loadHospitalData();
+            }, 3000);
+        }
+        
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
             }
         }
         
         document.addEventListener('DOMContentLoaded', function() {
             loadHospitalData();
-            initializeWebRTC();
+            startPolling();
+        });
+        
+        // Stop polling when page is hidden/closed
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
         });
     </script>
 </body>

@@ -80,20 +80,24 @@ const LiveTrackingScreen = () => {
     }
     
     startLocationTracking();
-    initializeWebRTC();
+    const stopPolling = startPolling();
     
-    // Cleanup location tracking when component unmounts
+    // Cleanup location tracking and polling when component unmounts
     return () => {
       LocationService.stopBookingTracking();
-      if ((global as any).peerpyrtcClient) {
-        (global as any).peerpyrtcClient.closeConnection();
-      }
+      stopPolling();
     };
   }, []);
 
-  const initializeWebRTC = async () => {
-    // WebRTC not supported in React Native - using polling instead
-    console.log('ℹ️ Using polling for real-time updates (WebRTC not available in React Native)');
+  const startPolling = () => {
+    // Poll for booking status updates every 3 seconds
+    const pollInterval = setInterval(() => {
+      if (booking && !isAssigned && !isCancelled) {
+        checkBookingStatus();
+      }
+    }, 3000);
+    
+    return () => clearInterval(pollInterval);
   };
 
   const startLocationTracking = async () => {
@@ -130,7 +134,7 @@ const LiveTrackingScreen = () => {
     }
   }, [booking, isAssigned, isCancelled]);
 
-  // Removed polling - using WebRTC for real-time updates
+  // Using polling for real-time updates instead of WebRTC
 
   const createBooking = async () => {
     console.log('Creating booking with data:', bookingData);
