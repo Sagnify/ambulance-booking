@@ -624,7 +624,8 @@
                 const script = document.createElement('script');
                 script.src = 'https://unpkg.com/peerpyrtc-client/dist/peerpyrtc.umd.js';
                 script.onload = async () => {
-                    hospitalWebRTC = new window.WebRTCConnection(`hospital_${hospitalId}`, {
+                    const { WebRTCConnection } = window.WebRTCConnection;
+                    hospitalWebRTC = new WebRTCConnection(`hospital_${hospitalId}`, {
                         peerId: `hospital_dashboard_${hospitalId}`,
                         debug: true
                     });

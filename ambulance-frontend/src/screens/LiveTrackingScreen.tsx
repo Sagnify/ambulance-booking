@@ -84,14 +84,15 @@ const LiveTrackingScreen = () => {
         };
         
         rtc.onError = (error) => {
-          console.error('❌ LiveTracking WebRTC Error:', error);
+          console.error('❌ LiveTracking WebRTC Error (non-blocking):', error);
         };
         
         await rtc.connect();
         (global as any).peerpyrtcClient = rtc;
       }
     } catch (error) {
-      console.error('WebRTC initialization failed:', error);
+      console.error('WebRTC initialization failed (non-blocking):', error);
+      // Continue without WebRTC - app still works
     }
   };
 

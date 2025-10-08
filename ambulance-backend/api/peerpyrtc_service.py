@@ -1,90 +1,46 @@
 from flask import Blueprint, request, jsonify
 from peerpyrtc import SignalingManager
-import logging
 
 # Initialize PeerPyRTC SignalingManager
-signaling_manager = SignalingManager()
-peerpyrtc_bp = Blueprint('peerpyrtc', __name__, url_prefix='/webrtc')
+signaling_manager = SignalingManager(debug=True)
+peerpyrtc_bp = Blueprint('peerpyrtc', __name__)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Message handler
+@signaling_manager.message_handler
+async def on_message(room_name: str, sender_id: str, message: str):
+    print(f"Message in {room_name} from {sender_id}: {message}")
 
+# Peer event handlers
+@signaling_manager.peer_joined_handler
+async def on_peer_joined(room_name: str, peer_id: str, peer_info: dict):
+    print(f"🟢 {peer_id} joined {room_name}")
+
+@signaling_manager.peer_left_handler
+async def on_peer_left(room_name: str, peer_id: str, peer_info: dict):
+    print(f"🔴 {peer_id} left {room_name}")
+
+# Standard WebRTC signaling endpoints
 @peerpyrtc_bp.route('/offer', methods=['POST'])
-def handle_offer():
-    """Handle WebRTC offer signaling"""
-    try:
-        data = request.get_json()
-        logger.info(f"Received offer: {data}")
-        
-        # Process offer through SignalingManager
-        result = signaling_manager.handle_offer(data)
-        return jsonify(result)
-    except Exception as e:
-        logger.error(f"Offer handling error: {e}")
-        return jsonify({"error": str(e)}), 500
+def offer():
+    data = request.json
+    result = signaling_manager.offer(data['room'], data['peer_id'], data['offer'])
+    return jsonify({"answer": result})
 
 @peerpyrtc_bp.route('/candidate', methods=['POST'])
-def handle_candidate():
-    """Handle WebRTC ICE candidate signaling"""
-    try:
-        data = request.get_json()
-        logger.info(f"Received candidate: {data}")
-        
-        # Process candidate through SignalingManager
-        result = signaling_manager.handle_candidate(data)
-        return jsonify(result)
-    except Exception as e:
-        logger.error(f"Candidate handling error: {e}")
-        return jsonify({"error": str(e)}), 500
+def candidate():
+    data = request.json
+    signaling_manager.candidate(data['room'], data['peer_id'], data['candidate'])
+    return jsonify({"status": "ok"})
 
 @peerpyrtc_bp.route('/leave', methods=['POST'])
-def handle_leave():
-    """Handle peer leaving room"""
-    try:
-        data = request.get_json()
-        logger.info(f"Peer leaving: {data}")
-        
-        # Process leave through SignalingManager
-        result = signaling_manager.handle_leave(data)
-        return jsonify(result)
-    except Exception as e:
-        logger.error(f"Leave handling error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-# Event handlers for SignalingManager
-@signaling_manager.on('message')
-def on_message(peer_id, room_id, message):
-    """Handle incoming messages"""
-    logger.info(f"Message from {peer_id} in room {room_id}: {message}")
-    # Broadcast to other peers in the room
-    signaling_manager.broadcast_to_room(room_id, message, exclude=peer_id)
-
-@signaling_manager.on('peer_joined')
-def on_peer_joined(peer_id, room_id):
-    """Handle peer joining room"""
-    logger.info(f"Peer {peer_id} joined room {room_id}")
-    # Notify other peers
-    signaling_manager.broadcast_to_room(room_id, {
-        'type': 'peer_joined',
-        'peer_id': peer_id
-    }, exclude=peer_id)
-
-@signaling_manager.on('peer_left')
-def on_peer_left(peer_id, room_id):
-    """Handle peer leaving room"""
-    logger.info(f"Peer {peer_id} left room {room_id}")
-    # Notify other peers
-    signaling_manager.broadcast_to_room(room_id, {
-        'type': 'peer_left',
-        'peer_id': peer_id
-    }, exclude=peer_id)
+def leave():
+    data = request.json
+    signaling_manager.leave(data['room'], data['peer_id'])
+    return jsonify({"status": "ok"})
 
 @peerpyrtc_bp.route('/status')
 def get_status():
-    """Get WebRTC server status"""
     return jsonify({
         "status": "active",
-        "rooms": signaling_manager.get_active_rooms(),
-        "total_peers": signaling_manager.get_peer_count()
+        "rooms": signaling_manager.rooms_info()
     })
