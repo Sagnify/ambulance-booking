@@ -1,2 +1,2 @@
-FLASK_APP=api.index
+FLASK_APP=api.main
 FLASK_DEBUG=1

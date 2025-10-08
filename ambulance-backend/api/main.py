@@ -1,25 +1,7 @@
-# from flask import Flask, jsonify, request
-# from flask_cors import CORS
-# from .otp_routes import otp_bp
-
-# app = Flask(__name__)
-# CORS(app)
-
-# # Register OTP Blueprint
-# app.register_blueprint(otp_bp)
-
-# @app.route('/')
-# def home():
-#     return jsonify({'message': 'Ambulance backend running!'})
-
-# if __name__ == '__main__':
-#     app.run(debug=True)
-
-# index.py
 from api import create_app
 from api.extensions import db
 from flask_cors import CORS
-from flask import render_template, request
+from flask import render_template, request, jsonify
 from api.webrtc_signaling import webrtc_bp
 
 # Create app via factory
@@ -29,16 +11,12 @@ CORS(app)
 # Register WebRTC signaling blueprint
 app.register_blueprint(webrtc_bp, url_prefix='/api')
 
-
-
 # Database health check
 @app.route('/api/health')
 def health_check():
-    from flask import jsonify
     from .models import Hospital, Driver, Booking
     
     try:
-        # Test database connection
         hospital_count = Hospital.query.count()
         driver_count = Driver.query.count()
         booking_count = Booking.query.count()
@@ -62,18 +40,12 @@ def health_check():
 # Clear all bookings endpoint
 @app.route('/api/clear-bookings', methods=['POST'])
 def clear_bookings():
-    from flask import jsonify
     from .models import Booking, Driver
     
     try:
-        # Delete all bookings
         Booking.query.delete()
-        
-        # Reset all drivers to Available status
         Driver.query.update({Driver.status: 'Available'})
-        
         db.session.commit()
-        
         return jsonify({"message": "All bookings cleared and drivers reset to available"})
     except Exception as e:
         db.session.rollback()
@@ -95,7 +67,6 @@ def webrtc_dashboard():
 # Hospital Login API
 @app.route('/api/hospital/login', methods=['POST'])
 def hospital_login():
-    from flask import request, jsonify
     from .models import Hospital
     
     data = request.get_json()
@@ -114,19 +85,15 @@ def hospital_login():
     
     return jsonify({"message": "Invalid credentials"}), 401
 
-
-
 # Hospital Dashboard Data
 @app.route('/api/hospital/<int:hospital_id>/dashboard')
 def hospital_dashboard_data(hospital_id):
-    from flask import jsonify
     from .models import Hospital, Driver, Booking
     from datetime import datetime
     
     hospital = Hospital.query.get_or_404(hospital_id)
     drivers = Driver.query.filter_by(hospital_id=hospital_id).all()
     
-    # Get real stats
     available_drivers = len([d for d in drivers if d.status == 'Available'])
     busy_drivers = len([d for d in drivers if d.status == 'Busy'])
     total_bookings = Booking.query.count()
@@ -192,16 +159,14 @@ def hospital_dashboard_data(hospital_id):
 # Driver Management APIs
 @app.route('/api/hospital/<int:hospital_id>/drivers', methods=['POST'])
 def add_driver(hospital_id):
-    from flask import request, jsonify
     from .models import Driver
     import re
     
     data = request.get_json()
     
-    # Generate driver_id from name (remove spaces, lowercase, add numbers)
     name_clean = re.sub(r'[^a-zA-Z]', '', data['name']).lower()
     existing_count = Driver.query.filter(Driver.driver_id.like(f"{name_clean}%")).count()
-    driver_login_id = f"{name_clean}{existing_count + 1:02d}"  # e.g., john01, john02
+    driver_login_id = f"{name_clean}{existing_count + 1:02d}"
     
     driver = Driver(
         name=data['name'],
@@ -226,7 +191,6 @@ def add_driver(hospital_id):
 
 @app.route('/api/hospital/<int:hospital_id>/drivers/<int:driver_id>', methods=['PUT'])
 def update_driver(hospital_id, driver_id):
-    from flask import request, jsonify
     from .models import Driver
     
     driver = Driver.query.filter_by(id=driver_id, hospital_id=hospital_id).first_or_404()
@@ -243,7 +207,6 @@ def update_driver(hospital_id, driver_id):
 
 @app.route('/api/hospital/<int:hospital_id>/drivers/<int:driver_id>', methods=['DELETE'])
 def delete_driver(hospital_id, driver_id):
-    from flask import jsonify
     from .models import Driver
     
     driver = Driver.query.filter_by(id=driver_id, hospital_id=hospital_id).first_or_404()
@@ -255,41 +218,30 @@ def delete_driver(hospital_id, driver_id):
 # Booking APIs
 @app.route('/api/bookings', methods=['POST'])
 def create_booking():
-    from flask import request, jsonify
     from .models import Booking, Driver, Hospital, User
     from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     import json
     
     try:
-        # Verify JWT token
         verify_jwt_in_request()
-        
         current_user_id = int(get_jwt_identity())
         claims = get_jwt()
         
-        print(f"JWT Identity: {get_jwt_identity()}")
-        print(f"JWT Claims: {claims}")
-        
-        # Ensure it's a user token (not driver)
         if claims.get('user_type') == 'driver':
             return jsonify({"error": "Invalid token type"}), 403
             
     except Exception as e:
-        print(f"JWT Error: {str(e)}")
         return jsonify({"error": "Invalid or missing token", "details": str(e)}), 401
     
     try:
-        # Ensure tables exist
         db.create_all()
         
-        # Check if hospitals exist, if not seed them
         if Hospital.query.count() == 0:
             from . import seed_sample_hospitals
             seed_sample_hospitals()
         
         data = request.get_json()
         
-        # Validate hospital exists
         hospital = Hospital.query.get(data['hospital_id'])
         if not hospital:
             return jsonify({
@@ -297,7 +249,6 @@ def create_booking():
                 "message": "Invalid hospital ID"
             }), 400
         
-        # Get authenticated user
         user = User.query.get(current_user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
@@ -335,7 +286,6 @@ def create_booking():
 
 @app.route('/api/bookings/<int:booking_id>/assign', methods=['POST'])
 def assign_ambulance(booking_id):
-    from flask import request, jsonify
     from .models import Booking, Driver
     from datetime import datetime
     
@@ -356,13 +306,11 @@ def assign_ambulance(booking_id):
 
 @app.route('/api/bookings/<int:booking_id>/auto-assign', methods=['POST'])
 def auto_assign_ambulance(booking_id):
-    from flask import jsonify
     from .models import Booking, Driver
     from datetime import datetime
     
     booking = Booking.query.get_or_404(booking_id)
     
-    # Find available driver from same hospital
     available_driver = Driver.query.filter_by(
         hospital_id=booking.hospital_id,
         status='Available'
@@ -390,23 +338,17 @@ def auto_assign_ambulance(booking_id):
 
 @app.route('/api/bookings/<int:booking_id>/status')
 def get_booking_status(booking_id):
-    from flask import jsonify
     from .models import Booking, Driver, Hospital
-    from flask_jwt_extended import get_jwt_identity, get_jwt
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     
     try:
-        from flask_jwt_extended import verify_jwt_in_request
         verify_jwt_in_request()
-        
         current_user_id = int(get_jwt_identity())
         claims = get_jwt()
         
-        # Allow both users and drivers to check booking status
         if claims.get('user_type') == 'driver':
-            # Driver can check bookings assigned to them
             booking = Booking.query.filter_by(id=booking_id, ambulance_id=current_user_id).first()
         else:
-            # User can check their own bookings
             booking = Booking.query.filter_by(id=booking_id, user_id=current_user_id).first()
             
         if not booking:
@@ -435,39 +377,12 @@ def get_booking_status(booking_id):
     
     return jsonify(result)
 
-# All Drivers API
-@app.route('/api/drivers')
-def get_all_drivers():
-    from flask import jsonify
-    from .models import Driver, Hospital
-    
-    drivers = db.session.query(Driver, Hospital).join(Hospital, Driver.hospital_id == Hospital.id).all()
-    
-    return jsonify({
-        "total_drivers": len(drivers),
-        "drivers": [{
-            "id": driver.id,
-            "name": driver.name,
-            "phone": driver.phone_number,
-            "vehicle_number": driver.vehicle_number,
-            "status": driver.status,
-            "location": driver.current_location,
-            "login_id": driver.driver_id,
-            "hospital": {
-                "id": hospital.id,
-                "name": hospital.name,
-                "address": hospital.address,
-                "contact": hospital.contact_number
-            }
-        } for driver, hospital in drivers]
-    })
-
 # Driver Authentication APIs
 @app.route('/driver/login', methods=['POST'])
 def driver_login():
-    from flask import request, jsonify
     from .models import Driver, Hospital
     from flask_jwt_extended import create_access_token
+    from datetime import timedelta
     
     data = request.get_json()
     login_id = data.get('login_id')
@@ -481,9 +396,9 @@ def driver_login():
     if driver:
         hospital = Hospital.query.get(driver.hospital_id)
         
-        # Create JWT token
         access_token = create_access_token(
             identity=str(driver.id),
+            expires_delta=timedelta(days=30),
             additional_claims={
                 "user_type": "driver",
                 "hospital_id": driver.hospital_id
@@ -509,15 +424,11 @@ def driver_login():
 
 @app.route('/driver/location', methods=['POST'])
 def update_driver_location():
-    from flask import request, jsonify
     from .models import Driver
-    from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     
     try:
-        # Verify JWT token
-        from flask_jwt_extended import verify_jwt_in_request
         verify_jwt_in_request()
-        
         current_driver_id = int(get_jwt_identity())
         claims = get_jwt()
         
@@ -546,14 +457,11 @@ def update_driver_location():
 
 @app.route('/driver/bookings')
 def get_driver_bookings():
-    from flask import jsonify
     from .models import Booking, Hospital
-    from flask_jwt_extended import get_jwt_identity, get_jwt
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     
     try:
-        from flask_jwt_extended import verify_jwt_in_request
         verify_jwt_in_request()
-        
         current_driver_id = int(get_jwt_identity())
         claims = get_jwt()
         
@@ -587,7 +495,6 @@ def get_driver_bookings():
 
 @app.route('/booking/status', methods=['POST'])
 def update_booking_status():
-    from flask import request, jsonify
     from .models import Booking, Driver
     from datetime import datetime
     
@@ -606,7 +513,6 @@ def update_booking_status():
     
     if status == 'completed':
         booking.completed_at = datetime.utcnow()
-        # Make driver available again
         if booking.ambulance_id:
             driver = Driver.query.get(booking.ambulance_id)
             if driver:
@@ -618,14 +524,11 @@ def update_booking_status():
 
 @app.route('/driver/availability', methods=['POST'])
 def set_driver_availability():
-    from flask import request, jsonify
     from .models import Driver
-    from flask_jwt_extended import get_jwt_identity, get_jwt
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     
     try:
-        from flask_jwt_extended import verify_jwt_in_request
         verify_jwt_in_request()
-        
         current_driver_id = int(get_jwt_identity())
         claims = get_jwt()
         
@@ -653,18 +556,14 @@ def set_driver_availability():
 
 @app.route('/api/users/<int:user_id>')
 def get_user(user_id):
-    from flask import jsonify
     from .models import User
-    from flask_jwt_extended import get_jwt_identity, get_jwt
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     
     try:
-        from flask_jwt_extended import verify_jwt_in_request
         verify_jwt_in_request()
-        
         current_user_id = int(get_jwt_identity())
         claims = get_jwt()
         
-        # Ensure it's a user token and user can only access their own data
         if claims.get('user_type') == 'driver' or current_user_id != user_id:
             return jsonify({"error": "Unauthorized"}), 403
             
@@ -682,6 +581,5 @@ def get_user(user_id):
         "email": user.email
     })
 
-# Run directly
 if __name__ == '__main__':
     app.run(debug=True)
