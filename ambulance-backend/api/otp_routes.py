@@ -12,7 +12,10 @@ def send_otp_helper(phone_number):
         if not phone_number:
             return {'error': 'Phone number is required'}, 400
         
-        if not phone_number.isdigit() or len(phone_number) < 10:
+        # Clean phone number for validation
+        clean_phone = phone_number.replace('+', '').replace('-', '').replace(' ', '')
+        
+        if not clean_phone.isdigit() or len(clean_phone) < 10:
             return {'error': 'Invalid phone number format'}, 400
         
         print(f"Generated OTP for {phone_number}: {FIXED_OTP}")
@@ -25,6 +28,9 @@ def verify_otp_helper(phone_number, otp):
     try:
         if not phone_number or not otp:
             return {'error': 'Phone number and OTP are required'}, 400
+        
+        # Clean phone number for comparison
+        clean_phone = phone_number.replace('+', '').replace('-', '').replace(' ', '')
         
         if otp == FIXED_OTP:
             return {'message': 'OTP verified successfully'}, 200

@@ -426,6 +426,80 @@ def driver_login():
     
     return jsonify({"error": "Invalid credentials"}), 401
 
+@app.route('/api/auth/driver/login', methods=['POST'])
+def driver_phone_login():
+    from .models import Driver
+    from .otp_routes import send_otp_helper
+    
+    data = request.get_json()
+    phone_number = data.get('phone_number')
+    
+    if not phone_number:
+        return jsonify({'error': 'Phone number is required'}), 400
+    
+    # Check if driver exists with this phone number
+    driver = Driver.query.filter_by(phone_number=phone_number).first()
+    if not driver:
+        return jsonify({'error': 'Driver not found with this phone number'}), 404
+    
+    # Send OTP for login
+    otp_data, otp_status = send_otp_helper(phone_number)
+    if otp_status != 200:
+        return jsonify(otp_data), otp_status
+    
+    return jsonify({'message': 'OTP sent for driver login verification'}), 200
+
+@app.route('/api/auth/driver/login/verify', methods=['POST'])
+def driver_phone_login_verify():
+    from .models import Driver, Hospital
+    from .otp_routes import verify_otp_helper
+    from flask_jwt_extended import create_access_token
+    from datetime import timedelta
+    
+    data = request.get_json()
+    phone_number = data.get('phone_number')
+    otp = data.get('otp')
+    
+    if not phone_number or not otp:
+        return jsonify({'error': 'Phone number and OTP are required'}), 400
+    
+    # Verify OTP
+    verify_data, verify_status = verify_otp_helper(phone_number, otp)
+    if verify_status != 200:
+        return jsonify(verify_data), verify_status
+    
+    # Get driver
+    driver = Driver.query.filter_by(phone_number=phone_number).first()
+    if not driver:
+        return jsonify({'error': 'Driver not found'}), 404
+    
+    hospital = Hospital.query.get(driver.hospital_id)
+    
+    # Generate JWT token
+    access_token = create_access_token(
+        identity=str(driver.id),
+        expires_delta=timedelta(days=30),
+        additional_claims={
+            "user_type": "driver",
+            "hospital_id": driver.hospital_id
+        }
+    )
+    
+    return jsonify({
+        "access_token": access_token,
+        "driver": {
+            "id": driver.id,
+            "name": driver.name,
+            "phone": driver.phone_number,
+            "license_number": driver.license_number,
+            "hospital_id": driver.hospital_id,
+            "is_available": driver.is_available,
+            "current_latitude": driver.current_latitude,
+            "current_longitude": driver.current_longitude,
+            "hospital_name": hospital.name if hospital else None
+        }
+    }), 200
+
 @app.route('/driver/location', methods=['POST'])
 def update_driver_location():
     from .models import Driver
@@ -476,7 +550,7 @@ def get_driver_bookings():
         return jsonify({"error": "Invalid or missing token"}), 401
     
     bookings = Booking.query.filter_by(ambulance_id=current_driver_id).filter(
-        Booking.status.in_(['assigned', 'en_route', 'arrived'])
+        Booking.status.in_(['Assigned', 'On Route', 'Arrived'])
     ).all()
     
     result = []
@@ -666,43 +740,102 @@ def get_all_drivers():
 @app.route('/')
 def api_list():
     try:
-        from .models import Hospital, Driver
+        from .models import Hospital, Driver, Booking
         hospital_count = Hospital.query.count()
         driver_count = Driver.query.count()
+        booking_count = Booking.query.count()
     except Exception as e:
         hospital_count = 0
         driver_count = 0
+        booking_count = 0
         
     return {
-        "message": "Ambulance Booking API",
+        "message": "Ambulance Booking API - All Routes",
         "statistics": {
             "total_hospitals": hospital_count,
             "total_drivers": driver_count,
-            "total_organizations": hospital_count
+            "total_bookings": booking_count
         },
         "endpoints": {
-            "Health Routes": {
-                "GET /api/health": "Check server and database status"
+            "Health & System": {
+                "GET /api/health": "Check server and database status",
+                "POST /api/clear-bookings": "Clear all bookings and reset drivers"
             },
-            "Hospital Routes": {
-                "GET /api/hospitals": "Get list of all hospitals and organizations",
+            "Hospital Management": {
+                "GET /api/hospitals": "Get all hospitals",
                 "GET /api/hospitals/nearby": "Get nearby hospitals (params: lat, lng, radius)",
-                "POST /api/hospitals/seed": "Populate database with Kolkata hospitals (sample data)"
+                "POST /api/hospitals/seed": "Seed sample hospitals",
+                "POST /api/hospital/login": "Hospital dashboard login",
+                "GET /api/hospital/<id>/dashboard": "Hospital dashboard data",
+                "POST /api/hospital/<id>/drivers": "Add new driver",
+                "PUT /api/hospital/<id>/drivers/<driver_id>": "Update driver",
+                "DELETE /api/hospital/<id>/drivers/<driver_id>": "Delete driver"
             },
-            "OTP Routes": {
-                "POST /api/otp/send": "Send OTP to phone number",
-                "POST /api/otp/verify": "Verify OTP code"
-            },
-            "Auth Routes": {
-                "POST /api/auth/signup": "Send OTP for new user signup",
+            "User Authentication": {
+                "POST /api/auth/signup": "Send OTP for user signup",
                 "POST /api/auth/signup/verify": "Verify OTP and create user",
-                "POST /api/auth/login": "Send OTP for existing user login",
+                "POST /api/auth/login": "Send OTP for user login",
                 "POST /api/auth/login/verify": "Verify OTP and authenticate user",
-                "PUT /api/auth/profile": "Update user profile details"
+                "PUT /api/auth/profile": "Update user profile",
+                "GET /api/users/<id>": "Get user details"
+            },
+            "Driver Authentication": {
+                "POST /driver/login": "Driver login with login_id/password",
+                "POST /api/auth/driver/login": "Send OTP for driver phone login",
+                "POST /api/auth/driver/login/verify": "Verify OTP and authenticate driver",
+                "POST /driver/location": "Update driver location",
+                "POST /driver/availability": "Set driver availability",
+                "GET /driver/bookings": "Get driver's assigned bookings"
+            },
+            "Booking Management": {
+                "POST /api/bookings": "Create new booking (JWT required)",
+                "GET /api/bookings/<id>/status": "Get booking status (JWT required)",
+                "POST /api/bookings/<id>/assign": "Manually assign ambulance",
+                "POST /api/bookings/<id>/auto-assign": "Auto-assign available ambulance",
+                "POST /booking/status": "Update booking status"
+            },
+            "OTP System": {
+                "POST /send-otp": "Send OTP to phone number",
+                "POST /verify-otp": "Verify OTP code"
+            },
+            "WebRTC Signaling": {
+                "POST /webrtc/offer": "WebRTC offer signaling",
+                "POST /webrtc/candidate": "WebRTC candidate signaling",
+                "POST /webrtc/leave": "Leave WebRTC room"
+            },
+            "Dashboard Pages": {
+                "GET /dashboard": "Hospital dashboard page",
+                "GET /dashboard/login": "Hospital login page",
+                "GET /webrtc-dashboard": "WebRTC hospital dashboard"
             },
             "Driver Routes": {
-                "GET /api/drivers": "Get all drivers from all hospitals with details"
+                "GET /api/drivers": "Get all drivers from all hospitals"
             }
+        },
+        "authentication": {
+            "JWT_Required": [
+                "/api/bookings (POST)",
+                "/api/bookings/<id>/status (GET)",
+                "/api/auth/profile (PUT)",
+                "/api/users/<id> (GET)",
+                "/driver/location (POST)",
+                "/driver/availability (POST)",
+                "/driver/bookings (GET)"
+            ],
+            "No_Auth_Required": [
+                "All /api/hospitals routes",
+                "All /api/auth/login and /api/auth/signup routes",
+                "All OTP routes",
+                "All dashboard pages",
+                "Health and system routes"
+            ]
+        },
+        "notes": {
+            "OTP": "Fixed OTP is '1234' for all phone numbers",
+            "JWT": "Tokens expire in 30 days",
+            "Phone_Format": "Accepts international formats, cleaned automatically",
+            "Driver_Login": "Supports both login_id/password and phone/OTP methods",
+            "WebRTC": "Uses PeerPyRTC for real-time communication"
         }
     }
 

@@ -19,6 +19,29 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const driverAPI = {
+  // Phone-based OTP login
+  sendOTP: async (phoneNumber: string): Promise<void> => {
+    await api.post('/api/auth/driver/login', {
+      phone_number: phoneNumber,
+    });
+  },
+
+  verifyOTP: async (phoneNumber: string, otp: string): Promise<{ token: string; driver: Driver }> => {
+    const response = await api.post('/api/auth/driver/login/verify', {
+      phone_number: phoneNumber,
+      otp: otp,
+    });
+    
+    // Store JWT token
+    await AsyncStorage.setItem('driver_token', response.data.access_token);
+    
+    return {
+      token: response.data.access_token,
+      driver: response.data.driver
+    };
+  },
+
+  // Legacy login_id/password login (keep for backward compatibility)
   login: async (loginId: string, password: string): Promise<{ token: string; driver: Driver }> => {
     const response = await api.post('/driver/login', {
       login_id: loginId,

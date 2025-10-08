@@ -12,25 +12,47 @@ import { useAuth } from '../context/AuthContext';
 import { driverAPI } from '../services/api';
 
 const LoginScreen: React.FC = () => {
-  const [loginId, setLoginId] = useState('');
-  const [password, setPassword] = useState('');
+  const [step, setStep] = useState(1); // 1: Phone, 2: OTP
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
 
-  const handleLogin = async () => {
-    if (!loginId.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+  const handleSendOTP = async () => {
+    if (!phoneNumber.trim()) {
+      Alert.alert('Error', 'Please enter your phone number');
       return;
     }
 
     setIsLoading(true);
     try {
-      const { driver } = await driverAPI.login(loginId.trim(), password.trim());
+      await driverAPI.sendOTP(phoneNumber.trim());
+      setStep(2);
+      Alert.alert('Success', 'OTP sent to your phone number');
+    } catch (error: any) {
+      Alert.alert(
+        'Error',
+        error.response?.data?.error || 'Driver not found with this phone number'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otp.trim()) {
+      Alert.alert('Error', 'Please enter the OTP');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { driver } = await driverAPI.verifyOTP(phoneNumber.trim(), otp.trim());
       await login(driver);
     } catch (error: any) {
       Alert.alert(
         'Login Failed',
-        error.response?.data?.error || 'Invalid credentials'
+        error.response?.data?.error || 'Invalid OTP'
       );
     } finally {
       setIsLoading(false);
@@ -41,44 +63,72 @@ const LoginScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>🚑 Driver Login</Text>
-        <Text style={styles.subtitle}>Enter your credentials to continue</Text>
+        <Text style={styles.subtitle}>
+          {step === 1 ? 'Enter your phone number' : 'Enter the OTP sent to your phone'}
+        </Text>
       </View>
 
       <View style={styles.form}>
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Login ID</Text>
-          <TextInput
-            style={styles.input}
-            value={loginId}
-            onChangeText={setLoginId}
-            placeholder="Enter your login ID"
-            autoCapitalize="none"
-          />
-        </View>
+        {step === 1 ? (
+          <>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                placeholder="Enter your phone number"
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+              />
+            </View>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            secureTextEntry
-            autoCapitalize="none"
-          />
-        </View>
+            <TouchableOpacity
+              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+              onPress={handleSendOTP}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.loginButtonText}>Send OTP</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>OTP</Text>
+              <TextInput
+                style={styles.input}
+                value={otp}
+                onChangeText={setOtp}
+                placeholder="Enter OTP"
+                keyboardType="number-pad"
+                autoCapitalize="none"
+              />
+            </View>
 
-        <TouchableOpacity
-          style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-          onPress={handleLogin}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.loginButtonText}>Login</Text>
-          )}
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+              onPress={handleVerifyOTP}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.loginButtonText}>Verify & Login</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => setStep(1)}
+            >
+              <Text style={styles.backButtonText}>Back to Phone Number</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -139,6 +189,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  backButton: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 
