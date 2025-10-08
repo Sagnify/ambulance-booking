@@ -54,6 +54,7 @@ class Driver(db.Model, TimestampMixin):
 class Booking(db.Model, TimestampMixin):
     __tablename__ = 'bookings'
     id = db.Column(db.Integer, primary_key=True)
+    booking_code = db.Column(db.String(8), unique=True, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     hospital_id = db.Column(db.Integer, db.ForeignKey('hospitals.id'), nullable=False)
     ambulance_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)

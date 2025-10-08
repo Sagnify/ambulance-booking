@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useBooking } from '../../context/BookingContext';
@@ -23,9 +23,10 @@ const OngoingBookingBar: React.FC = () => {
   const handlePress = () => {
     navigation.navigate('LiveTracking' as never, { 
       bookingData: {
+        booking_code: ongoingBooking.booking_code,
         booking_type: ongoingBooking.booking_type,
         pickup_location: ongoingBooking.pickup_location,
-        destination: ongoingBooking.pickup_location
+        destination: ongoingBooking.destination || ongoingBooking.hospital?.name || 'Hospital'
       }
     } as never);
   };
@@ -41,10 +42,11 @@ const OngoingBookingBar: React.FC = () => {
           <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
           <View style={styles.textSection}>
             <Text style={[styles.title, { color: colors.text }]}>
-              🚑 {ongoingBooking.booking_type} Booking
+              🚑 {ongoingBooking.booking_type} #{ongoingBooking.booking_code}
             </Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {ongoingBooking.status} • Tap to view
+              {ongoingBooking.status}
+              {ongoingBooking.ambulance ? ` • ${ongoingBooking.ambulance.driver_name}` : ''} • Tap to view
             </Text>
           </View>
         </View>
@@ -59,18 +61,18 @@ const OngoingBookingBar: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 20,
+    left: 16,
+    right: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 999,
+    zIndex: 9999,
   },
   content: {
     flexDirection: 'row',

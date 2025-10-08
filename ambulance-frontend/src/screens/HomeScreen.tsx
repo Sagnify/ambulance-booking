@@ -554,7 +554,7 @@ const HomeScreen = () => {
       pickup_location: address,
       pickup_latitude: userLocation.latitude,
       pickup_longitude: userLocation.longitude,
-      destination: bookingHospitalData?.name,
+      destination: bookingHospitalData?.name || 'Hospital',
       booking_type: 'Normal',
       patient_name: userName,
       patient_phone: userPhone
@@ -569,7 +569,7 @@ const HomeScreen = () => {
       pickup_location: address,
       pickup_latitude: userLocation.latitude,
       pickup_longitude: userLocation.longitude,
-      destination: selectedHospital?.name,
+      destination: selectedHospital?.name || 'Emergency Hospital',
       booking_type: 'Emergency',
       emergency_type: emergencyData.condition,
       severity: emergencyData.severity,
@@ -586,7 +586,7 @@ const HomeScreen = () => {
       pickup_location: address,
       pickup_latitude: userLocation.latitude,
       pickup_longitude: userLocation.longitude,
-      destination: selectedHospital?.name,
+      destination: selectedHospital?.name || 'Trauma Center',
       booking_type: 'Accident',
       severity: accidentData.injuriesVisible,
       accident_details: {
@@ -998,9 +998,8 @@ const HomeScreen = () => {
         onCancel={handleEmergencyCancel}
         onConfirm={handleEmergencyConfirm}
       />
-      
-      <OngoingBookingBar />
     </View>
+    <OngoingBookingBar />
     </GestureHandlerRootView>
   );
 };

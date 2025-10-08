@@ -260,7 +260,20 @@ def create_booking():
         
         data = request.get_json()
         
-        hospital = Hospital.query.get(data['hospital_id'])
+        # Get hospital_id with fallback
+        hospital_id = data.get('hospital_id')
+        if not hospital_id:
+            # Use first available hospital as fallback
+            first_hospital = Hospital.query.first()
+            if first_hospital:
+                hospital_id = first_hospital.id
+            else:
+                return jsonify({
+                    "error": "No hospitals available",
+                    "message": "Please try again later"
+                }), 400
+        
+        hospital = Hospital.query.get(hospital_id)
         if not hospital:
             return jsonify({
                 "error": "Hospital not found",
@@ -271,9 +284,22 @@ def create_booking():
         if not user:
             return jsonify({"error": "User not found"}), 404
         
+        # Generate unique 8-digit booking code
+        import random
+        import string
+        
+        def generate_booking_code():
+            while True:
+                code = ''.join(random.choices(string.digits, k=8))
+                if not Booking.query.filter_by(booking_code=code).first():
+                    return code
+        
+        booking_code = generate_booking_code()
+        
         booking = Booking(
+            booking_code=booking_code,
             user_id=current_user_id,
-            hospital_id=data['hospital_id'],
+            hospital_id=hospital_id,
             pickup_location=data['pickup_location'],
             pickup_latitude=data.get('pickup_latitude'),
             pickup_longitude=data.get('pickup_longitude'),
@@ -291,6 +317,7 @@ def create_booking():
         
         return jsonify({
             "booking_id": booking.id,
+            "booking_code": booking.booking_code,
             "status": "Pending",
             "message": "Booking created successfully"
         })
@@ -397,6 +424,63 @@ def get_booking_status(booking_id):
     
     return jsonify(result)
 
+@app.route('/api/bookings/code/<booking_code>')
+def get_booking_by_code(booking_code):
+    from .models import Booking, Driver, Hospital
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
+    
+    try:
+        verify_jwt_in_request()
+        current_user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        
+        booking = Booking.query.filter_by(booking_code=booking_code).first()
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        # Check ownership
+        if claims.get('user_type') == 'driver':
+            if booking.ambulance_id != current_user_id:
+                return jsonify({"error": "Unauthorized"}), 403
+        else:
+            if booking.user_id != current_user_id:
+                return jsonify({"error": "Unauthorized"}), 403
+                
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
+    
+    hospital = Hospital.query.get(booking.hospital_id)
+    
+    result = {
+        "id": booking.id,
+        "booking_code": booking.booking_code,
+        "status": booking.status,
+        "booking_type": booking.booking_type,
+        "pickup_location": booking.pickup_location,
+        "destination": booking.destination,
+        "requested_at": booking.requested_at.isoformat(),
+        "auto_assigned": booking.auto_assigned,
+        "is_cancelled": booking.status in ['Cancelled', 'Auto-Cancelled'],
+        "cancel_reason": "No ambulance available" if booking.status == 'Auto-Cancelled' else None,
+        "hospital": {
+            "name": hospital.name,
+            "address": hospital.address,
+            "contact_number": hospital.contact_number
+        } if hospital else None
+    }
+    
+    if booking.ambulance_id:
+        driver = Driver.query.get(booking.ambulance_id)
+        if driver:
+            result["ambulance"] = {
+                "driver_name": driver.name,
+                "driver_phone": driver.phone_number,
+                "vehicle_number": driver.vehicle_number,
+                "assigned_at": booking.assigned_at.isoformat() if booking.assigned_at else None
+            }
+    
+    return jsonify(result)
+
 @app.route('/api/user/ongoing-booking')
 def get_user_ongoing_booking():
     from .models import Booking, Driver, Hospital
@@ -425,6 +509,7 @@ def get_user_ongoing_booking():
         "has_ongoing": True,
         "booking": {
             "id": ongoing_booking.id,
+            "booking_code": ongoing_booking.booking_code,
             "status": ongoing_booking.status,
             "booking_type": ongoing_booking.booking_type,
             "pickup_location": ongoing_booking.pickup_location,
@@ -454,30 +539,44 @@ def cancel_booking(booking_id):
         current_user_id = int(get_jwt_identity())
         claims = get_jwt()
         
+        print(f"Cancel request from user {current_user_id} for booking {booking_id}")
+        
         if claims.get('user_type') == 'driver':
             return jsonify({"error": "Drivers cannot cancel bookings"}), 403
         
         booking = Booking.query.filter_by(id=booking_id, user_id=current_user_id).first()
         if not booking:
+            print(f"Booking {booking_id} not found for user {current_user_id}")
             return jsonify({"error": "Booking not found or unauthorized"}), 404
+        
+        print(f"Found booking {booking_id} with status {booking.status}")
             
-    except Exception:
+    except Exception as e:
+        print(f"Auth error in cancel booking: {str(e)}")
         return jsonify({"error": "Invalid or missing token"}), 401
     
-    if booking.status in ['Completed', 'Cancelled']:
+    if booking.status in ['Completed', 'Cancelled', 'Auto-Cancelled']:
         return jsonify({"error": "Cannot cancel completed or already cancelled booking"}), 400
     
-    # Free up the driver if assigned
-    if booking.ambulance_id:
-        driver = Driver.query.get(booking.ambulance_id)
-        if driver:
-            driver.status = 'Available'
-    
-    booking.status = 'Cancelled'
-    booking.completed_at = datetime.utcnow()
-    db.session.commit()
-    
-    return jsonify({"message": "Booking cancelled successfully"})
+    try:
+        # Free up the driver if assigned
+        if booking.ambulance_id:
+            driver = Driver.query.get(booking.ambulance_id)
+            if driver:
+                print(f"Freeing up driver {driver.id} from status {driver.status}")
+                driver.status = 'Available'
+        
+        print(f"Changing booking {booking_id} status from {booking.status} to Cancelled")
+        booking.status = 'Cancelled'
+        booking.completed_at = datetime.utcnow()
+        db.session.commit()
+        
+        print(f"Successfully cancelled booking {booking_id}")
+        return jsonify({"message": "Booking cancelled successfully"})
+    except Exception as e:
+        print(f"Error cancelling booking {booking_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({"error": f"Failed to cancel booking: {str(e)}"}), 500
 
 @app.route('/api/hospital/<int:hospital_id>/bookings/<int:booking_id>/cancel', methods=['POST'])
 def hospital_cancel_booking(hospital_id, booking_id):
@@ -505,7 +604,7 @@ def hospital_cancel_booking(hospital_id, booking_id):
 
 @app.route('/api/bookings/auto-cancel-expired', methods=['POST'])
 def auto_cancel_expired_bookings():
-    from .models import Booking
+    from .models import Booking, Driver
     from datetime import datetime, timedelta
     
     # Auto-assign after 30 seconds, cancel after 2 minutes

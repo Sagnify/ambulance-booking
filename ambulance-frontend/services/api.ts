@@ -59,6 +59,15 @@ export const cancelBooking = async (bookingId: number) => {
   }
 };
 
+export const cancelBookingByCode = async (bookingCode: string) => {
+  try {
+    const response = await API.post(`/api/bookings/code/${bookingCode}/cancel`);
+    return response.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to cancel booking');
+  }
+};
+
 export const getBookingStatus = async (bookingId: number) => {
   try {
     const response = await API.get(`/api/bookings/${bookingId}/status`);
@@ -74,6 +83,15 @@ export const getOngoingBooking = async () => {
     return response.data;
   } catch (error: any) {
     throw new Error(error.response?.data?.message || 'Failed to get ongoing booking');
+  }
+};
+
+export const getBookingByCode = async (bookingCode: string) => {
+  try {
+    const response = await API.get(`/api/bookings/code/${bookingCode}`);
+    return response.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to get booking');
   }
 };
 

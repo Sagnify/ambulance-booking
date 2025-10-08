@@ -4,13 +4,20 @@ import { getBookingStatus, getOngoingBooking } from '../services/api';
 
 interface OngoingBooking {
   booking_id: number;
+  booking_code: string;
   status: string;
   booking_type: string;
   pickup_location: string;
+  destination?: string;
   is_cancelled: boolean;
+  hospital?: {
+    name: string;
+    address: string;
+  };
   ambulance?: {
     driver_name: string;
     vehicle_number: string;
+    driver_phone: string;
   };
 }
 
@@ -42,10 +49,13 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (apiResult.has_ongoing) {
         const booking = {
           booking_id: apiResult.booking.id,
+          booking_code: apiResult.booking.booking_code,
           status: apiResult.booking.status,
           booking_type: apiResult.booking.booking_type,
           pickup_location: apiResult.booking.pickup_location,
+          destination: apiResult.booking.destination,
           is_cancelled: apiResult.booking.is_cancelled,
+          hospital: apiResult.booking.hospital,
           ambulance: apiResult.booking.ambulance
         };
         setOngoingBookingState(booking);

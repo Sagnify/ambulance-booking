@@ -33,7 +33,7 @@ const LiveTrackingScreen = () => {
   const { setOngoingBooking } = useBooking();
   const webViewRef = useRef(null);
   
-  const [booking, setBooking] = useState<{ booking_id: number } | null>(null);
+  const [booking, setBooking] = useState<{ booking_id: number; booking_code: string } | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [isAssigned, setIsAssigned] = useState(false);
   const [isCancelled, setIsCancelled] = useState(false);
@@ -114,15 +114,20 @@ const LiveTrackingScreen = () => {
         destination: bookingData.destination || bookingData.pickup_location
       });
       
-      const newBooking = { booking_id: response.data.booking_id };
+      const newBooking = { 
+        booking_id: response.data.booking_id,
+        booking_code: response.data.booking_code
+      };
       setBooking(newBooking);
       
       // Set ongoing booking in context
       setOngoingBooking({
         booking_id: response.data.booking_id,
+        booking_code: response.data.booking_code,
         status: 'Pending',
         booking_type: bookingData.booking_type,
         pickup_location: bookingData.pickup_location,
+        destination: bookingData.destination,
         is_cancelled: false
       });
     } catch (error: any) {
@@ -364,7 +369,7 @@ const LiveTrackingScreen = () => {
                   <Text style={[styles.stepTime, { color: colors.textSecondary }]}>
                     {isCancelled ? (cancelReason || 'Cancelled') : 
                      isAssigned ? 'Completed' : 
-                     timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Processing...'
+                     timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Processing...'}
                   </Text>
                 </View>
               </View>
