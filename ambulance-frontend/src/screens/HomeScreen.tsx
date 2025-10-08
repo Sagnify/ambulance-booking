@@ -26,9 +26,11 @@ import AccidentForm from '../components/AccidentForm';
 import LoadingScreen from './LoadingScreen';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useBooking } from '../../context/BookingContext';
 import API from '../../services/api';
 import { useNavigation } from '@react-navigation/native';
 import LocationService from '../../services/locationService';
+import OngoingBookingBar from '../components/OngoingBookingBar';
 
 
 const { width, height } = Dimensions.get('window');
@@ -36,6 +38,7 @@ const { width, height } = Dimensions.get('window');
 const HomeScreen = () => {
   const { logout } = useAuth();
   const { isDarkMode, colors } = useTheme();
+  const { hasOngoingBooking, checkOngoingBooking } = useBooking();
   const navigation = useNavigation<any>();
   const [address, setAddress] = useState('Fetching location...');
   const [userLocation, setUserLocation] = useState({ 
@@ -227,6 +230,11 @@ const HomeScreen = () => {
   
   // Handle slide to book completion
   const handleSlideToBookComplete = () => {
+    if (isBookingDisabled) {
+      alert('You have an ongoing booking. Please complete it before making a new booking.');
+      return;
+    }
+    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setBookingHospitalData(selectedHospitalForBooking); // Store hospital data
     setSelectedHospitalForBooking(null); // Hide slider
@@ -255,6 +263,17 @@ const HomeScreen = () => {
       friction: 8,
     }).start();
   };
+
+  // Check for ongoing booking on screen focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      checkOngoingBooking();
+    });
+    return unsubscribe;
+  }, [navigation, checkOngoingBooking]);
+
+  // Disable booking if there's an ongoing booking
+  const isBookingDisabled = hasOngoingBooking;
 
   // Get user name from auth context
   const { userName: authUserName, setUserData, userId: authUserId, userToken: authUserToken } = useAuth();
@@ -336,6 +355,11 @@ const HomeScreen = () => {
   }, []);
 
   const handleServiceSelect = (service: 'emergency' | 'accident') => {
+    if (isBookingDisabled) {
+      alert('You have an ongoing booking. Please complete it before making a new booking.');
+      return;
+    }
+    
     setSelectedService(service);
     if (service === 'emergency') {
       setShowEmergencyModal(true);
@@ -961,7 +985,7 @@ const HomeScreen = () => {
       {renderBottomPanel()}
       
       {/* Floating Slide to Book - Only on initial hospital list page */}
-      {selectedHospitalForBooking && !showBookingConfirmation && 
+      {selectedHospitalForBooking && !showBookingConfirmation && !isBookingDisabled &&
        !showEmergencyForm && !showEmergencyDashboard && !showAccidentForm && !showHospitalSelection && !showFinalConfirmation && !showAccidentConfirmation && !showAccidentHospitalSelection && (
         <SlideToBook 
           hospitalName={selectedHospitalForBooking.name}
@@ -974,6 +998,8 @@ const HomeScreen = () => {
         onCancel={handleEmergencyCancel}
         onConfirm={handleEmergencyConfirm}
       />
+      
+      <OngoingBookingBar />
     </View>
     </GestureHandlerRootView>
   );

@@ -2,15 +2,20 @@ import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import { useTheme } from '../../context/ThemeContext';
+import { useBooking } from '../../context/BookingContext';
 import * as Haptics from 'expo-haptics';
 
 interface SlideToBookProps {
   onSlideComplete: () => void;
   hospitalName: string;
+  disabled?: boolean;
 }
 
-const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName }) => {
+const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName, disabled }) => {
   const { colors } = useTheme();
+  const { hasOngoingBooking } = useBooking();
+  
+  const isDisabled = disabled || hasOngoingBooking;
   const translateX = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const slideHintAnim = useRef(new Animated.Value(0)).current;
@@ -43,7 +48,7 @@ const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName
   }, []);
 
   const onGestureEvent = (event: any) => {
-    if (maxSlide <= 0) return; // Wait for layout
+    if (maxSlide <= 0 || isDisabled) return; // Wait for layout or disabled
     
     const { translationX } = event.nativeEvent;
     const clampedX = Math.max(0, Math.min(maxSlide, translationX));
@@ -73,7 +78,7 @@ const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName
   };
 
   const onHandlerStateChange = (event: any) => {
-    if (event.nativeEvent.oldState === 4) {
+    if (event.nativeEvent.oldState === 4 && !isDisabled) {
       // Stop vibration when gesture ends
       if (vibrationInterval) {
         clearInterval(vibrationInterval);
@@ -128,13 +133,19 @@ const SlideToBook: React.FC<SlideToBookProps> = ({ onSlideComplete, hospitalName
 
   return (
     <Animated.View 
-      style={[styles.sliderContainer, { backgroundColor: colors.primary, transform: [{ scale: scaleAnim }] }]}
+      style={[styles.sliderContainer, { 
+        backgroundColor: isDisabled ? colors.textSecondary : colors.primary, 
+        transform: [{ scale: scaleAnim }],
+        opacity: isDisabled ? 0.6 : 1
+      }]}
       onLayout={(event) => {
         const { width } = event.nativeEvent.layout;
         setContainerWidth(width);
       }}
     >
-      <Text style={[styles.sliderText, { color: '#fff' }]}>Slide to book ambulance</Text>
+      <Text style={[styles.sliderText, { color: '#fff' }]}>
+        {isDisabled ? 'Complete current booking first' : 'Slide to book ambulance'}
+      </Text>
       <PanGestureHandler
         onGestureEvent={onGestureEvent}
         onHandlerStateChange={onHandlerStateChange}

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WebRTCConnection } from 'peerpyrtc-client';
+
 
 const API = axios.create({
   baseURL: 'https://ambulance-booking-roan.vercel.app',
@@ -47,6 +47,33 @@ export const createBooking = async (bookingData: any) => {
       };
     }
     throw new Error(error.response?.data?.message || 'Failed to create booking');
+  }
+};
+
+export const cancelBooking = async (bookingId: number) => {
+  try {
+    const response = await API.post(`/api/bookings/${bookingId}/cancel`);
+    return response.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to cancel booking');
+  }
+};
+
+export const getBookingStatus = async (bookingId: number) => {
+  try {
+    const response = await API.get(`/api/bookings/${bookingId}/status`);
+    return response.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to get booking status');
+  }
+};
+
+export const getOngoingBooking = async () => {
+  try {
+    const response = await API.get('/api/user/ongoing-booking');
+    return response.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to get ongoing booking');
   }
 };
 

@@ -365,8 +365,9 @@
                             <option value="">🚑 Select Ambulance</option>
                             ${availableDriversOptions}
                         </select>
-                        <button onclick="assignAmbulance(${booking.id}, 'auto')" class="px-4 py-2 text-sm bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-lg hover:from-gray-600 hover:to-gray-700 font-medium transition-all">
-                            ⚡ Auto Assign
+
+                        <button onclick="cancelBooking(${booking.id})" class="px-3 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium transition-all">
+                            ❌ Cancel
                         </button>
                     </div>
                 </div>
@@ -455,6 +456,9 @@
                                 <button onclick="trackAmbulance(${booking.id})" class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
                                     📍 Track
                                 </button>
+                                <button onclick="cancelBooking(${booking.id})" class="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors">
+                                    ❌ Cancel
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -530,16 +534,10 @@
             if (!driverId || driverId === '') return;
             
             try {
-                const endpoint = driverId === 'auto' ? 
-                    `/api/bookings/${bookingId}/auto-assign` : 
-                    `/api/bookings/${bookingId}/assign`;
-                
-                const body = driverId === 'auto' ? {} : { driver_id: parseInt(driverId) };
-                
-                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                const response = await fetch(`${API_BASE_URL}/api/bookings/${bookingId}/assign`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
+                    body: JSON.stringify({ driver_id: parseInt(driverId) })
                 });
                 
                 if (response.ok) {
@@ -547,6 +545,28 @@
                 }
             } catch (error) {
                 console.error('Failed to assign ambulance:', error);
+            }
+        }
+        
+        async function cancelBooking(bookingId) {
+            if (!confirm('Are you sure you want to cancel this booking?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/hospital/${hospitalId}/bookings/${bookingId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    loadHospitalData(); // Refresh data
+                    alert('Booking cancelled successfully');
+                } else {
+                    const error = await response.json();
+                    alert(error.error || 'Failed to cancel booking');
+                }
+            } catch (error) {
+                console.error('Failed to cancel booking:', error);
+                alert('Failed to cancel booking');
             }
         }
         

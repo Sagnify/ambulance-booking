@@ -16,7 +16,8 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import MapViewComponent from '../components/MapView';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import API from '../../services/api';
+import { useBooking } from '../../context/BookingContext';
+import API, { cancelBooking } from '../../services/api';
 import LocationService from '../../services/locationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -29,11 +30,14 @@ const LiveTrackingScreen = () => {
   const { bookingData } = route.params as { bookingData: any };
   const { colors } = useTheme();
   const { userToken } = useAuth();
+  const { setOngoingBooking } = useBooking();
   const webViewRef = useRef(null);
   
   const [booking, setBooking] = useState<{ booking_id: number } | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(30);
   const [isAssigned, setIsAssigned] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
+  const [cancelReason, setCancelReason] = useState<string | null>(null);
   const [ambulanceLocation, setAmbulanceLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   interface Driver {
     driver_name?: string;
@@ -78,12 +82,11 @@ const LiveTrackingScreen = () => {
   };
 
   useEffect(() => {
-    if (!isAssigned && timeRemaining > 0) {
+    if (!isAssigned && !isCancelled && timeRemaining > 0) {
       const timer = setInterval(() => {
         setTimeRemaining(prev => {
           if (prev <= 1) {
-            // Skip auto-assignment since manual assignment from hospital works
-            console.log('Timer expired - waiting for manual assignment from hospital');
+            checkBookingStatus();
             return 0;
           }
           return prev - 1;
@@ -91,7 +94,14 @@ const LiveTrackingScreen = () => {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [timeRemaining, isAssigned]);
+  }, [timeRemaining, isAssigned, isCancelled]);
+
+  useEffect(() => {
+    if (booking && !isAssigned && !isCancelled) {
+      const statusInterval = setInterval(checkBookingStatus, 5000);
+      return () => clearInterval(statusInterval);
+    }
+  }, [booking, isAssigned, isCancelled]);
 
   // Removed polling - using WebRTC for real-time updates
 
@@ -104,7 +114,17 @@ const LiveTrackingScreen = () => {
         destination: bookingData.destination || bookingData.pickup_location
       });
       
-      setBooking({ booking_id: response.data.booking_id });
+      const newBooking = { booking_id: response.data.booking_id };
+      setBooking(newBooking);
+      
+      // Set ongoing booking in context
+      setOngoingBooking({
+        booking_id: response.data.booking_id,
+        status: 'Pending',
+        booking_type: bookingData.booking_type,
+        pickup_location: bookingData.pickup_location,
+        is_cancelled: false
+      });
     } catch (error: any) {
       console.error('Booking creation failed:', error);
       Alert.alert('Error', error.response?.data?.error || 'Booking failed. Please try again.');
@@ -118,13 +138,36 @@ const LiveTrackingScreen = () => {
       const response = await API.get(`/api/bookings/${booking.booking_id}/status`);
       const result = response.data;
       
-      if (result.status === 'Assigned' && result.ambulance) {
+      if (result.is_cancelled) {
+        setIsCancelled(true);
+        setCancelReason(result.cancel_reason);
+        if (result.status === 'Auto-Cancelled') {
+          setOngoingBooking(null); // Clear ongoing booking
+          Alert.alert(
+            'Booking Auto-Cancelled',
+            'Sorry, no ambulance was available. Please try booking with a different hospital.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+        }
+      } else if (result.status === 'Assigned' && result.ambulance) {
         setIsAssigned(true);
         setAssignedDriver(result.ambulance);
         setAmbulanceLocation({
           latitude: userLocation.latitude + 0.01,
           longitude: userLocation.longitude + 0.01
         });
+        
+        // Update ongoing booking with assignment info
+        setOngoingBooking({
+          booking_id: booking.booking_id,
+          status: result.status,
+          booking_type: bookingData.booking_type,
+          pickup_location: bookingData.pickup_location,
+          is_cancelled: false,
+          ambulance: result.ambulance
+        });
+      } else if (result.status === 'Completed') {
+        setOngoingBooking(null); // Clear completed booking
       }
     } catch (error) {
       console.log('Status check failed, booking may not exist in backend');
@@ -167,6 +210,36 @@ const LiveTrackingScreen = () => {
       case 'Accident': return '#ff6600';
       default: return '#0066cc';
     }
+  };
+
+  const handleCancelBooking = () => {
+    Alert.alert(
+      'Cancel Booking',
+      'Are you sure you want to cancel this booking?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Cancel', 
+          style: 'destructive',
+          onPress: async () => {
+            if (booking) {
+              try {
+                await cancelBooking(booking.booking_id);
+                setOngoingBooking(null); // Clear ongoing booking
+                Alert.alert('Success', 'Booking cancelled successfully', [
+                  { text: 'OK', onPress: () => navigation.goBack() }
+                ]);
+              } catch (error: any) {
+                Alert.alert('Error', error.message || 'Failed to cancel booking');
+              }
+            } else {
+              setOngoingBooking(null);
+              navigation.goBack();
+            }
+          }
+        }
+      ]
+    );
   };
 
   interface PanGestureEvent {
@@ -215,12 +288,14 @@ const LiveTrackingScreen = () => {
         
         <ScrollView style={styles.panelContent} showsVerticalScrollIndicator={false}>
           <View style={styles.dashboardHeader}>
-            <Text style={[styles.dashboardTitle, { color: getThemeColor() }]}>
-              🚑 {bookingData.booking_type} Tracking
+            <Text style={[styles.dashboardTitle, { color: isCancelled ? '#DC2626' : getThemeColor() }]}>
+              {isCancelled ? '❌ Booking Cancelled' : `🚑 ${bookingData.booking_type} Tracking`}
             </Text>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
+            {!isCancelled && (
+              <TouchableOpacity onPress={handleCancelBooking}>
+                <Text style={[styles.cancelText, { color: '#DC2626' }]}>Cancel</Text>
+              </TouchableOpacity>
+            )}
           </View>
           
           {/* Hospital & Driver Hybrid Card */}
@@ -264,9 +339,9 @@ const LiveTrackingScreen = () => {
           <View style={[styles.statusTracker, { backgroundColor: colors.surface }]}>
             <View style={styles.statusHeader}>
               <Text style={[styles.statusTitle, { color: colors.text }]}>Ambulance Status</Text>
-              <View style={[styles.statusBadge, { backgroundColor: isAssigned ? '#10B981' : '#F59E0B' }]}>
+              <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#DC2626' : isAssigned ? '#10B981' : '#F59E0B' }]}>
                 <Text style={styles.statusBadgeText}>
-                  {isAssigned ? '🚑 Assigned' : '⏳ Assigning'}
+                  {isCancelled ? '❌ Cancelled' : isAssigned ? '🚑 Assigned' : '⏳ Assigning'}
                 </Text>
               </View>
             </View>
@@ -287,7 +362,9 @@ const LiveTrackingScreen = () => {
                 <View style={styles.stepContent}>
                   <Text style={[styles.stepTitle, { color: isAssigned ? colors.text : colors.textSecondary }]}>Ambulance Assigned</Text>
                   <Text style={[styles.stepTime, { color: colors.textSecondary }]}>
-                    {isAssigned ? 'Completed' : timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Processing...'}
+                    {isCancelled ? (cancelReason || 'Cancelled') : 
+                     isAssigned ? 'Completed' : 
+                     timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Processing...'
                   </Text>
                 </View>
               </View>

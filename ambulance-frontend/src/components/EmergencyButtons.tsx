@@ -1,27 +1,34 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useBooking } from '../../context/BookingContext';
 
 interface EmergencyButtonsProps {
   onServiceSelect: (service: 'emergency' | 'accident') => void;
+  disabled?: boolean;
 }
 
-const EmergencyButtons: React.FC<EmergencyButtonsProps> = ({ onServiceSelect }) => {
+const EmergencyButtons: React.FC<EmergencyButtonsProps> = ({ onServiceSelect, disabled }) => {
   const { colors } = useTheme();
+  const { hasOngoingBooking } = useBooking();
+  
+  const isDisabled = disabled || hasOngoingBooking;
 
   return (
     <View style={styles.emergencyButtons}>
       <TouchableOpacity 
-        style={[styles.emergencyBtn, { backgroundColor: colors.primary }]}
-        onPress={() => onServiceSelect('emergency')}
+        style={[styles.emergencyBtn, { backgroundColor: isDisabled ? colors.textSecondary : colors.primary }]}
+        onPress={() => !isDisabled && onServiceSelect('emergency')}
+        disabled={isDisabled}
       >
-        <Text style={styles.emergencyBtnText}>🚨 Emergency</Text>
+        <Text style={[styles.emergencyBtnText, { opacity: isDisabled ? 0.6 : 1 }]}>🚨 Emergency</Text>
       </TouchableOpacity>
       <TouchableOpacity 
-        style={[styles.emergencyBtn, { backgroundColor: colors.primary }]}
-        onPress={() => onServiceSelect('accident')}
+        style={[styles.emergencyBtn, { backgroundColor: isDisabled ? colors.textSecondary : colors.primary }]}
+        onPress={() => !isDisabled && onServiceSelect('accident')}
+        disabled={isDisabled}
       >
-        <Text style={styles.emergencyBtnText}>🚑 Accident</Text>
+        <Text style={[styles.emergencyBtnText, { opacity: isDisabled ? 0.6 : 1 }]}>🚑 Accident</Text>
       </TouchableOpacity>
     </View>
   );

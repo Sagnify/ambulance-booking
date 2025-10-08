@@ -2,6 +2,7 @@ from api import create_app
 from api.extensions import db
 from flask_cors import CORS
 from flask import render_template, request, jsonify
+from api.scheduler import start_scheduler
 
 # Create app via factory
 app = create_app()
@@ -18,6 +19,13 @@ except ImportError:
 try:
     from api.peerpyrtc_service import peerpyrtc_bp
     app.register_blueprint(peerpyrtc_bp)
+except ImportError:
+    pass
+
+# Register feature check service
+try:
+    from api.feature_check import feature_check_bp
+    app.register_blueprint(feature_check_bp)
 except ImportError:
     pass
 
@@ -373,7 +381,9 @@ def get_booking_status(booking_id):
         "booking_type": booking.booking_type,
         "pickup_location": booking.pickup_location,
         "requested_at": booking.requested_at.isoformat(),
-        "auto_assigned": booking.auto_assigned
+        "auto_assigned": booking.auto_assigned,
+        "is_cancelled": booking.status in ['Cancelled', 'Auto-Cancelled'],
+        "cancel_reason": "No ambulance available" if booking.status == 'Auto-Cancelled' else None
     }
     
     if booking.ambulance_id:
@@ -386,6 +396,163 @@ def get_booking_status(booking_id):
         }
     
     return jsonify(result)
+
+@app.route('/api/user/ongoing-booking')
+def get_user_ongoing_booking():
+    from .models import Booking, Driver, Hospital
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
+    
+    try:
+        verify_jwt_in_request()
+        current_user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        
+        if claims.get('user_type') == 'driver':
+            return jsonify({"error": "Invalid token type"}), 403
+            
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
+    
+    # Find ongoing booking for user
+    ongoing_booking = Booking.query.filter_by(user_id=current_user_id).filter(
+        Booking.status.in_(['Pending', 'Assigned', 'On Route', 'Arrived'])
+    ).first()
+    
+    if not ongoing_booking:
+        return jsonify({"has_ongoing": False})
+    
+    result = {
+        "has_ongoing": True,
+        "booking": {
+            "id": ongoing_booking.id,
+            "status": ongoing_booking.status,
+            "booking_type": ongoing_booking.booking_type,
+            "pickup_location": ongoing_booking.pickup_location,
+            "requested_at": ongoing_booking.requested_at.isoformat(),
+            "is_cancelled": ongoing_booking.status in ['Cancelled', 'Auto-Cancelled']
+        }
+    }
+    
+    if ongoing_booking.ambulance_id:
+        driver = Driver.query.get(ongoing_booking.ambulance_id)
+        if driver:
+            result["booking"]["ambulance"] = {
+                "driver_name": driver.name,
+                "vehicle_number": driver.vehicle_number
+            }
+    
+    return jsonify(result)
+
+@app.route('/api/bookings/<int:booking_id>/cancel', methods=['POST'])
+def cancel_booking(booking_id):
+    from .models import Booking, Driver
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
+    from datetime import datetime
+    
+    try:
+        verify_jwt_in_request()
+        current_user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        
+        if claims.get('user_type') == 'driver':
+            return jsonify({"error": "Drivers cannot cancel bookings"}), 403
+        
+        booking = Booking.query.filter_by(id=booking_id, user_id=current_user_id).first()
+        if not booking:
+            return jsonify({"error": "Booking not found or unauthorized"}), 404
+            
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
+    
+    if booking.status in ['Completed', 'Cancelled']:
+        return jsonify({"error": "Cannot cancel completed or already cancelled booking"}), 400
+    
+    # Free up the driver if assigned
+    if booking.ambulance_id:
+        driver = Driver.query.get(booking.ambulance_id)
+        if driver:
+            driver.status = 'Available'
+    
+    booking.status = 'Cancelled'
+    booking.completed_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({"message": "Booking cancelled successfully"})
+
+@app.route('/api/hospital/<int:hospital_id>/bookings/<int:booking_id>/cancel', methods=['POST'])
+def hospital_cancel_booking(hospital_id, booking_id):
+    from .models import Booking, Driver
+    from datetime import datetime
+    
+    booking = Booking.query.filter_by(id=booking_id, hospital_id=hospital_id).first()
+    if not booking:
+        return jsonify({"error": "Booking not found"}), 404
+    
+    if booking.status in ['Completed', 'Cancelled']:
+        return jsonify({"error": "Cannot cancel completed or already cancelled booking"}), 400
+    
+    # Free up the driver if assigned
+    if booking.ambulance_id:
+        driver = Driver.query.get(booking.ambulance_id)
+        if driver:
+            driver.status = 'Available'
+    
+    booking.status = 'Cancelled'
+    booking.completed_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({"message": "Booking cancelled by hospital"})
+
+@app.route('/api/bookings/auto-cancel-expired', methods=['POST'])
+def auto_cancel_expired_bookings():
+    from .models import Booking
+    from datetime import datetime, timedelta
+    
+    # Auto-assign after 30 seconds, cancel after 2 minutes
+    assign_cutoff = datetime.utcnow() - timedelta(seconds=30)
+    cancel_cutoff = datetime.utcnow() - timedelta(minutes=2)
+    
+    # First try to auto-assign pending bookings
+    pending_for_assignment = Booking.query.filter(
+        Booking.status == 'Pending',
+        Booking.requested_at < assign_cutoff
+    ).all()
+    
+    assigned_count = 0
+    for booking in pending_for_assignment:
+        available_driver = Driver.query.filter_by(
+            hospital_id=booking.hospital_id,
+            status='Available'
+        ).first()
+        
+        if available_driver:
+            booking.ambulance_id = available_driver.id
+            booking.status = 'Assigned'
+            booking.assigned_at = datetime.utcnow()
+            booking.auto_assigned = True
+            available_driver.status = 'Busy'
+            assigned_count += 1
+    
+    # Then cancel bookings that are still pending after 2 minutes
+    expired_bookings = Booking.query.filter(
+        Booking.status == 'Pending',
+        Booking.requested_at < cancel_cutoff
+    ).all()
+    
+    cancelled_count = 0
+    for booking in expired_bookings:
+        booking.status = 'Auto-Cancelled'
+        booking.completed_at = datetime.utcnow()
+        cancelled_count += 1
+    
+    if assigned_count > 0 or cancelled_count > 0:
+        db.session.commit()
+    
+    return jsonify({
+        "message": f"Auto-assigned {assigned_count} bookings, cancelled {cancelled_count} expired bookings",
+        "assigned_count": assigned_count,
+        "cancelled_count": cancelled_count
+    })
 
 # Driver Authentication APIs
 @app.route('/driver/login', methods=['POST'])
@@ -814,6 +981,9 @@ def api_list():
                 "GET /api/bookings/<id>/status": "Get booking status (JWT required)",
                 "POST /api/bookings/<id>/assign": "Manually assign ambulance",
                 "POST /api/bookings/<id>/auto-assign": "Auto-assign available ambulance",
+                "POST /api/bookings/<id>/cancel": "Cancel booking (user)",
+                "POST /api/hospital/<id>/bookings/<id>/cancel": "Cancel booking (hospital)",
+                "GET /api/user/ongoing-booking": "Check user's ongoing booking",
                 "POST /booking/status": "Update booking status"
             },
             "OTP System": {
@@ -862,4 +1032,5 @@ def api_list():
     }
 
 if __name__ == '__main__':
+    start_scheduler()
     app.run(debug=True)

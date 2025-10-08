@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { BookingProvider } from './context/BookingContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
 export default function App() {
@@ -11,7 +12,9 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <AuthProvider>
-          <AppNavigator />
+          <BookingProvider>
+            <AppNavigator />
+          </BookingProvider>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
