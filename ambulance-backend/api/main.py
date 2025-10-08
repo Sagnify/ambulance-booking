@@ -55,19 +55,27 @@ def health_check():
             "error": str(e)
         }), 500
 
-# Clear all bookings endpoint
+# Clear all bookings endpoint - ADMIN ONLY
 @app.route('/api/clear-bookings', methods=['POST'])
 def clear_bookings():
     from .models import Booking, Driver
     
+    # Add basic authentication check
+    import os
+    auth_header = request.headers.get('Authorization')
+    admin_token = os.getenv('ADMIN_CLEAR_TOKEN', 'admin-clear-token')
+    if not auth_header or auth_header != f'Bearer {admin_token}':
+        return jsonify({"error": "Unauthorized"}), 401
+    
     try:
         Booking.query.delete()
-        Driver.query.update({Driver.status: 'Available'})
+        for driver in Driver.query.all():
+            driver.status = 'Available'
         db.session.commit()
         return jsonify({"message": "All bookings cleared and drivers reset to available"})
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Database operation failed"}), 500
 
 # Hospital Dashboard Routes
 @app.route('/dashboard')
@@ -87,21 +95,49 @@ def webrtc_dashboard():
 def hospital_login():
     from .models import Hospital
     
-    data = request.get_json()
-    hospital_id = data.get('hospital_id')
-    password = data.get('password')
-    
-    if hospital_id and password == "admin":
-        hospital = Hospital.query.filter_by(hospital_id=hospital_id).first()
-        if hospital:
-            return jsonify({
-                "token": f"hospital_{hospital.id}",
-                "hospital_id": hospital.id,
-                "hospital_name": hospital.name,
-                "message": "Login successful"
-            })
-    
-    return jsonify({"message": "Invalid credentials"}), 401
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid request data"}), 400
+            
+        hospital_id = data.get('hospital_id')
+        password = data.get('password')
+        
+        if not hospital_id or not password:
+            return jsonify({"error": "Hospital ID and password required"}), 400
+        
+        # Use environment variable for admin password
+        import os
+        admin_password = os.getenv('HOSPITAL_ADMIN_PASSWORD', 'admin')
+        if password == admin_password:
+            hospital = Hospital.query.filter_by(hospital_id=hospital_id).first()
+            if hospital:
+                return jsonify({
+                    "token": f"hospital_{hospital.id}",
+                    "hospital_id": hospital.id,
+                    "hospital_name": hospital.name,
+                    "message": "Login successful"
+                })
+        
+        return jsonify({"error": "Invalid credentials"}), 401
+    except Exception as e:
+        return jsonify({"error": "Login failed"}), 500
+
+def _format_pending_bookings(hospital_id, datetime):
+    from .models import Booking
+    return [{
+        "id": b.id,
+        "booking_type": b.booking_type,
+        "emergency_type": b.emergency_type,
+        "severity": b.severity,
+        "pickup_location": b.pickup_location,
+        "pickup_latitude": b.pickup_latitude,
+        "pickup_longitude": b.pickup_longitude,
+        "patient_name": b.patient_name,
+        "patient_phone": b.patient_phone,
+        "requested_at": b.requested_at.isoformat(),
+        "time_remaining": max(0, 30 - int((datetime.utcnow() - b.requested_at).total_seconds()))
+    } for b in Booking.query.filter_by(hospital_id=hospital_id, status='Pending').all()]
 
 # Hospital Dashboard Data
 @app.route('/api/hospital/<int:hospital_id>/dashboard')
@@ -116,7 +152,7 @@ def hospital_dashboard_data(hospital_id):
     busy_drivers = len([d for d in drivers if d.status == 'Busy'])
     total_bookings = Booking.query.count()
     
-    return jsonify({
+    jsonify_result = {
         "hospital": {
             "name": hospital.name,
             "address": hospital.address,
@@ -140,19 +176,7 @@ def hospital_dashboard_data(hospital_id):
             "login_id": d.driver_id,
             "password": d.password
         } for d in drivers],
-        "pending_bookings": [{
-            "id": b.id,
-            "booking_type": b.booking_type,
-            "emergency_type": b.emergency_type,
-            "severity": b.severity,
-            "pickup_location": b.pickup_location,
-            "pickup_latitude": b.pickup_latitude,
-            "pickup_longitude": b.pickup_longitude,
-            "patient_name": b.patient_name,
-            "patient_phone": b.patient_phone,
-            "requested_at": b.requested_at.isoformat(),
-            "time_remaining": max(0, 30 - int((datetime.utcnow() - b.requested_at).total_seconds()))
-        } for b in Booking.query.filter_by(hospital_id=hospital_id, status='Pending').all()],
+        "pending_bookings": _format_pending_bookings(hospital_id, datetime),
         "ongoing_bookings": [{
             "id": b.id,
             "booking_type": b.booking_type,
@@ -166,19 +190,29 @@ def hospital_dashboard_data(hospital_id):
             "status": b.status,
             "assigned_at": b.assigned_at.isoformat() if b.assigned_at else None,
             "auto_assigned": b.auto_assigned,
-            "ambulance": {
-                "driver_name": Driver.query.get(b.ambulance_id).name if b.ambulance_id else None,
-                "driver_phone": Driver.query.get(b.ambulance_id).phone_number if b.ambulance_id else None,
-                "vehicle_number": Driver.query.get(b.ambulance_id).vehicle_number if b.ambulance_id else None
-            } if b.ambulance_id else None
+            "ambulance_id": b.ambulance_id
         } for b in Booking.query.filter_by(hospital_id=hospital_id).filter(Booking.status.in_(['Assigned', 'On Route', 'Arrived'])).all()]
-    })
+    }
+    
+    # Add ambulance details efficiently
+    for booking in jsonify_result["ongoing_bookings"]:
+        if booking.get("ambulance_id"):
+            driver = Driver.query.get(booking["ambulance_id"])
+            if driver:
+                booking["ambulance"] = {
+                    "driver_name": driver.name,
+                    "driver_phone": driver.phone_number,
+                    "vehicle_number": driver.vehicle_number
+                }
+    
+    return jsonify(jsonify_result)
 
 # Driver Management APIs
 @app.route('/api/hospital/<int:hospital_id>/drivers', methods=['POST'])
 def add_driver(hospital_id):
     from .models import Driver
     import re
+    import os
     
     data = request.get_json()
     
@@ -189,12 +223,12 @@ def add_driver(hospital_id):
     driver = Driver(
         name=data['name'],
         phone_number=data['phone'],
-        license_number=data.get('license_number', f'LIC{existing_count + 1:04d}'),
+        license_number=data.get('license_number', f'LIC{Driver.query.count() + 1:04d}'),
         vehicle_number=data['vehicle'],
         hospital_id=hospital_id,
         status='Available',
         driver_id=driver_login_id,
-        password='driver123'
+        password=os.getenv('DEFAULT_DRIVER_PASSWORD', 'driver123')
     )
     
     db.session.add(driver)
@@ -204,7 +238,7 @@ def add_driver(hospital_id):
         "message": "Driver and ambulance added successfully",
         "driver_id": driver.id,
         "login_id": driver_login_id,
-        "password": "driver123"
+        "password": os.getenv('DEFAULT_DRIVER_PASSWORD', 'driver123')
     })
 
 @app.route('/api/hospital/<int:hospital_id>/drivers/<int:driver_id>', methods=['PUT'])
@@ -227,11 +261,18 @@ def update_driver(hospital_id, driver_id):
 def delete_driver(hospital_id, driver_id):
     from .models import Driver
     
-    driver = Driver.query.filter_by(id=driver_id, hospital_id=hospital_id).first_or_404()
-    db.session.delete(driver)
-    db.session.commit()
-    
-    return jsonify({"message": "Driver deleted successfully"})
+    try:
+        driver = Driver.query.filter_by(id=driver_id, hospital_id=hospital_id).first()
+        if not driver:
+            return jsonify({"error": "Driver not found"}), 404
+            
+        db.session.delete(driver)
+        db.session.commit()
+        
+        return jsonify({"message": "Driver deleted successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete driver"}), 500
 
 # Booking APIs
 @app.route('/api/bookings', methods=['POST'])
@@ -259,6 +300,14 @@ def create_booking():
             seed_sample_hospitals()
         
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid request data"}), 400
+        
+        # Validate required fields
+        required_fields = ['pickup_location', 'booking_type']
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        if missing_fields:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
         
         # Get hospital_id with fallback
         hospital_id = data.get('hospital_id')
@@ -285,12 +334,11 @@ def create_booking():
             return jsonify({"error": "User not found"}), 404
         
         # Generate unique 8-digit booking code
-        import random
-        import string
+        import secrets
         
         def generate_booking_code():
             while True:
-                code = ''.join(random.choices(string.digits, k=8))
+                code = ''.join(secrets.choice('0123456789') for _ in range(8))
                 if not Booking.query.filter_by(booking_code=code).first():
                     return code
         
@@ -334,52 +382,79 @@ def assign_ambulance(booking_id):
     from .models import Booking, Driver
     from datetime import datetime
     
-    data = request.get_json()
-    driver_id = data.get('driver_id')
-    
-    booking = Booking.query.get_or_404(booking_id)
-    driver = Driver.query.get_or_404(driver_id)
-    
-    booking.ambulance_id = driver_id
-    booking.status = 'Assigned'
-    booking.assigned_at = datetime.utcnow()
-    driver.status = 'Busy'
-    
-    db.session.commit()
-    
-    return jsonify({"message": "Ambulance assigned successfully"})
+    try:
+        data = request.get_json()
+        if not data or not data.get('driver_id'):
+            return jsonify({"error": "Driver ID required"}), 400
+            
+        driver_id = data.get('driver_id')
+        
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+            
+        driver = Driver.query.get(driver_id)
+        if not driver:
+            return jsonify({"error": "Driver not found"}), 404
+            
+        if driver.status != 'Available':
+            return jsonify({"error": "Driver not available"}), 400
+            
+        if booking.status != 'Pending':
+            return jsonify({"error": "Booking cannot be assigned"}), 400
+        
+        booking.ambulance_id = driver_id
+        booking.status = 'Assigned'
+        booking.assigned_at = datetime.utcnow()
+        driver.status = 'Busy'
+        
+        db.session.commit()
+        
+        return jsonify({"message": "Ambulance assigned successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Assignment failed"}), 500
 
 @app.route('/api/bookings/<int:booking_id>/auto-assign', methods=['POST'])
 def auto_assign_ambulance(booking_id):
     from .models import Booking, Driver
     from datetime import datetime
     
-    booking = Booking.query.get_or_404(booking_id)
-    
-    available_driver = Driver.query.filter_by(
-        hospital_id=booking.hospital_id,
-        status='Available'
-    ).first()
-    
-    if available_driver:
-        booking.ambulance_id = available_driver.id
-        booking.status = 'Assigned'
-        booking.assigned_at = datetime.utcnow()
-        booking.auto_assigned = True
-        available_driver.status = 'Busy'
+    try:
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+            
+        if booking.status != 'Pending':
+            return jsonify({"error": "Booking cannot be auto-assigned"}), 400
         
-        db.session.commit()
+        available_driver = Driver.query.filter_by(
+            hospital_id=booking.hospital_id,
+            status='Available'
+        ).first()
         
-        return jsonify({
-            "message": "Ambulance auto-assigned",
-            "driver": {
-                "name": available_driver.name,
-                "phone": available_driver.phone_number,
-                "vehicle": available_driver.vehicle_number
-            }
-        })
-    
-    return jsonify({"message": "No available ambulance"}), 404
+        if available_driver:
+            booking.ambulance_id = available_driver.id
+            booking.status = 'Assigned'
+            booking.assigned_at = datetime.utcnow()
+            booking.auto_assigned = True
+            available_driver.status = 'Busy'
+            
+            db.session.commit()
+            
+            return jsonify({
+                "message": "Ambulance auto-assigned",
+                "driver": {
+                    "name": available_driver.name,
+                    "phone": available_driver.phone_number,
+                    "vehicle": available_driver.vehicle_number
+                }
+            })
+        
+        return jsonify({"error": "No available ambulance"}), 404
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Auto-assignment failed"}), 500
 
 @app.route('/api/bookings/<int:booking_id>/status')
 def get_booking_status(booking_id):
@@ -415,12 +490,13 @@ def get_booking_status(booking_id):
     
     if booking.ambulance_id:
         driver = Driver.query.get(booking.ambulance_id)
-        result["ambulance"] = {
-            "driver_name": driver.name,
-            "driver_phone": driver.phone_number,
-            "vehicle_number": driver.vehicle_number,
-            "assigned_at": booking.assigned_at.isoformat() if booking.assigned_at else None
-        }
+        if driver:
+            result["ambulance"] = {
+                "driver_name": driver.name,
+                "driver_phone": driver.phone_number,
+                "vehicle_number": driver.vehicle_number,
+                "assigned_at": booking.assigned_at.isoformat() if booking.assigned_at else None
+            }
     
     return jsonify(result)
 
@@ -494,39 +570,91 @@ def get_user_ongoing_booking():
         if claims.get('user_type') == 'driver':
             return jsonify({"error": "Invalid token type"}), 403
             
-    except Exception:
+    except Exception as e:
+        return jsonify({"error": "Invalid or missing token", "details": str(e)}), 401
+    
+    try:
+        # Find ongoing booking for user
+        ongoing_booking = Booking.query.filter_by(user_id=current_user_id).filter(
+            Booking.status.in_(['Pending', 'Assigned', 'On Route', 'Arrived'])
+        ).first()
+        
+        if not ongoing_booking:
+            return jsonify({"has_ongoing": False})
+        
+        hospital = Hospital.query.get(ongoing_booking.hospital_id)
+        
+        result = {
+            "has_ongoing": True,
+            "booking": {
+                "id": ongoing_booking.id,
+                "booking_code": ongoing_booking.booking_code,
+                "status": ongoing_booking.status,
+                "booking_type": ongoing_booking.booking_type,
+                "pickup_location": ongoing_booking.pickup_location,
+                "destination": ongoing_booking.destination,
+                "requested_at": ongoing_booking.requested_at.isoformat(),
+                "is_cancelled": ongoing_booking.status in ['Cancelled', 'Auto-Cancelled'],
+                "hospital": {
+                    "name": hospital.name,
+                    "address": hospital.address
+                } if hospital else None
+            }
+        }
+        
+        if ongoing_booking.ambulance_id:
+            driver = Driver.query.get(ongoing_booking.ambulance_id)
+            if driver:
+                result["booking"]["ambulance"] = {
+                    "driver_name": driver.name,
+                    "vehicle_number": driver.vehicle_number,
+                    "driver_phone": driver.phone_number
+                }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": "Database error", "details": str(e)}), 500
+
+@app.route('/api/bookings/code/<booking_code>/cancel', methods=['POST'])
+def cancel_booking_by_code(booking_code):
+    from .models import Booking, Driver
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
+    from datetime import datetime
+    
+    try:
+        verify_jwt_in_request()
+        current_user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        
+        if claims.get('user_type') == 'driver':
+            return jsonify({"error": "Drivers cannot cancel bookings"}), 403
+        
+        booking = Booking.query.filter_by(booking_code=booking_code, user_id=current_user_id).first()
+        if not booking:
+            return jsonify({"error": "Booking not found or unauthorized"}), 404
+            
+    except Exception as e:
         return jsonify({"error": "Invalid or missing token"}), 401
     
-    # Find ongoing booking for user
-    ongoing_booking = Booking.query.filter_by(user_id=current_user_id).filter(
-        Booking.status.in_(['Pending', 'Assigned', 'On Route', 'Arrived'])
-    ).first()
+    if booking.status in ['Completed', 'Cancelled', 'Auto-Cancelled']:
+        return jsonify({"error": "Cannot cancel completed or already cancelled booking"}), 400
     
-    if not ongoing_booking:
-        return jsonify({"has_ongoing": False})
-    
-    result = {
-        "has_ongoing": True,
-        "booking": {
-            "id": ongoing_booking.id,
-            "booking_code": ongoing_booking.booking_code,
-            "status": ongoing_booking.status,
-            "booking_type": ongoing_booking.booking_type,
-            "pickup_location": ongoing_booking.pickup_location,
-            "requested_at": ongoing_booking.requested_at.isoformat(),
-            "is_cancelled": ongoing_booking.status in ['Cancelled', 'Auto-Cancelled']
-        }
-    }
-    
-    if ongoing_booking.ambulance_id:
-        driver = Driver.query.get(ongoing_booking.ambulance_id)
-        if driver:
-            result["booking"]["ambulance"] = {
-                "driver_name": driver.name,
-                "vehicle_number": driver.vehicle_number
-            }
-    
-    return jsonify(result)
+    try:
+        # Free up the driver if assigned
+        if booking.ambulance_id:
+            driver = Driver.query.get(booking.ambulance_id)
+            if driver:
+                driver.status = 'Available'
+        
+        booking.status = 'Cancelled'
+        booking.completed_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({"message": "Booking cancelled successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to cancel booking"}), 500
 
 @app.route('/api/bookings/<int:booking_id>/cancel', methods=['POST'])
 def cancel_booking(booking_id):
@@ -583,24 +711,28 @@ def hospital_cancel_booking(hospital_id, booking_id):
     from .models import Booking, Driver
     from datetime import datetime
     
-    booking = Booking.query.filter_by(id=booking_id, hospital_id=hospital_id).first()
-    if not booking:
-        return jsonify({"error": "Booking not found"}), 404
-    
-    if booking.status in ['Completed', 'Cancelled']:
-        return jsonify({"error": "Cannot cancel completed or already cancelled booking"}), 400
-    
-    # Free up the driver if assigned
-    if booking.ambulance_id:
-        driver = Driver.query.get(booking.ambulance_id)
-        if driver:
-            driver.status = 'Available'
-    
-    booking.status = 'Cancelled'
-    booking.completed_at = datetime.utcnow()
-    db.session.commit()
-    
-    return jsonify({"message": "Booking cancelled by hospital"})
+    try:
+        booking = Booking.query.filter_by(id=booking_id, hospital_id=hospital_id).first()
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        if booking.status in ['Completed', 'Cancelled']:
+            return jsonify({"error": "Cannot cancel completed or already cancelled booking"}), 400
+        
+        # Free up the driver if assigned
+        if booking.ambulance_id:
+            driver = Driver.query.get(booking.ambulance_id)
+            if driver:
+                driver.status = 'Available'
+        
+        booking.status = 'Cancelled'
+        booking.completed_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({"message": "Booking cancelled by hospital"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to cancel booking"}), 500
 
 @app.route('/api/bookings/auto-cancel-expired', methods=['POST'])
 def auto_cancel_expired_bookings():
@@ -618,11 +750,11 @@ def auto_cancel_expired_bookings():
     ).all()
     
     assigned_count = 0
+    # Get all available drivers at once to avoid N+1 queries
+    available_drivers = {d.hospital_id: d for d in Driver.query.filter_by(status='Available').all()}
+    
     for booking in pending_for_assignment:
-        available_driver = Driver.query.filter_by(
-            hospital_id=booking.hospital_id,
-            status='Available'
-        ).first()
+        available_driver = available_drivers.get(booking.hospital_id)
         
         if available_driver:
             booking.ambulance_id = available_driver.id
@@ -630,6 +762,8 @@ def auto_cancel_expired_bookings():
             booking.assigned_at = datetime.utcnow()
             booking.auto_assigned = True
             available_driver.status = 'Busy'
+            # Remove from available list to prevent double assignment
+            del available_drivers[booking.hospital_id]
             assigned_count += 1
     
     # Then cancel bookings that are still pending after 2 minutes
@@ -788,22 +922,33 @@ def update_driver_location():
     except Exception:
         return jsonify({"error": "Invalid or missing token"}), 401
     
-    data = request.get_json()
-    latitude = data.get('latitude')
-    longitude = data.get('longitude')
-    
-    if not all([latitude, longitude]):
-        return jsonify({"error": "Latitude and longitude required"}), 400
-    
-    driver = Driver.query.get(current_driver_id)
-    if not driver:
-        return jsonify({"error": "Driver not found"}), 404
-    
-    driver.current_latitude = latitude
-    driver.current_longitude = longitude
-    db.session.commit()
-    
-    return jsonify({"message": "Location updated successfully"})
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid request data"}), 400
+            
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        
+        if not all([latitude, longitude]):
+            return jsonify({"error": "Latitude and longitude required"}), 400
+        
+        # Validate coordinate ranges
+        if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+            return jsonify({"error": "Invalid coordinates"}), 400
+        
+        driver = Driver.query.get(current_driver_id)
+        if not driver:
+            return jsonify({"error": "Driver not found"}), 404
+        
+        driver.current_latitude = latitude
+        driver.current_longitude = longitude
+        db.session.commit()
+        
+        return jsonify({"message": "Location updated successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Location update failed"}), 500
 
 @app.route('/driver/bookings')
 def get_driver_bookings():
@@ -847,30 +992,56 @@ def get_driver_bookings():
 def update_booking_status():
     from .models import Booking, Driver
     from datetime import datetime
+    from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
     
-    data = request.get_json()
-    booking_id = data.get('booking_id')
-    status = data.get('status')
+    try:
+        verify_jwt_in_request()
+        current_user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        
+        if claims.get('user_type') != 'driver':
+            return jsonify({"error": "Only drivers can update booking status"}), 403
+            
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
     
-    if not booking_id or not status:
-        return jsonify({"error": "Booking ID and status required"}), 400
-    
-    booking = Booking.query.get(booking_id)
-    if not booking:
-        return jsonify({"error": "Booking not found"}), 404
-    
-    booking.status = status
-    
-    if status == 'completed':
-        booking.completed_at = datetime.utcnow()
-        if booking.ambulance_id:
-            driver = Driver.query.get(booking.ambulance_id)
-            if driver:
-                driver.status = 'Available'
-    
-    db.session.commit()
-    
-    return jsonify({"message": "Booking status updated successfully"})
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid request data"}), 400
+            
+        booking_id = data.get('booking_id')
+        status = data.get('status')
+        
+        if not booking_id or not status:
+            return jsonify({"error": "Booking ID and status required"}), 400
+        
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+            
+        if booking.ambulance_id != current_user_id:
+            return jsonify({"error": "Unauthorized to update this booking"}), 403
+        
+        valid_statuses = ['Assigned', 'On Route', 'Arrived', 'Completed']
+        if status not in valid_statuses:
+            return jsonify({"error": "Invalid status"}), 400
+        
+        booking.status = status
+        
+        if status == 'Completed':
+            booking.completed_at = datetime.utcnow()
+            if booking.ambulance_id:
+                driver = Driver.query.get(booking.ambulance_id)
+                if driver:
+                    driver.status = 'Available'
+        
+        db.session.commit()
+        
+        return jsonify({"message": "Booking status updated successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Status update failed"}), 500
 
 @app.route('/driver/availability', methods=['POST'])
 def set_driver_availability():
@@ -951,44 +1122,70 @@ def get_hospitals():
 @app.route('/api/hospitals/nearby')
 def get_nearby_hospitals():
     from .models import Hospital
-    lat = request.args.get('lat', type=float)
-    lng = request.args.get('lng', type=float)
-    radius = request.args.get('radius', 10, type=float)
     
-    if not lat or not lng:
-        return jsonify({"error": "Latitude and longitude are required"}), 400
-    
-    hospitals = Hospital.query.all()
-    nearby = []
-    
-    for h in hospitals:
-        # Simple distance calculation (not accurate but works for demo)
-        distance = ((h.latitude - lat) ** 2 + (h.longitude - lng) ** 2) ** 0.5 * 111
-        if distance <= radius:
-            nearby.append({
-                "id": h.id,
-                "name": h.name,
-                "address": h.address,
-                "latitude": h.latitude,
-                "longitude": h.longitude,
-                "type": h.type,
-                "emergency_services": h.emergency_services,
-                "distance": str(round(distance, 2)),
-                "contact_number": h.contact_number
-            })
-    
-    # Sort by distance
-    nearby.sort(key=lambda x: float(x['distance']))
-    
-    return jsonify({
-        "hospitals": nearby,
-        "total": len(nearby),
-        "search_params": {
-            "latitude": lat,
-            "longitude": lng,
-            "radius_km": radius
-        }
-    })
+    try:
+        lat = request.args.get('lat', type=float)
+        lng = request.args.get('lng', type=float)
+        radius = request.args.get('radius', 10, type=float)
+        
+        if not lat or not lng:
+            return jsonify({"error": "Latitude and longitude are required"}), 400
+        
+        # Validate coordinate ranges
+        if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+            return jsonify({"error": "Invalid coordinates"}), 400
+            
+        if radius <= 0 or radius > 100:
+            return jsonify({"error": "Radius must be between 1 and 100 km"}), 400
+        
+        hospitals = Hospital.query.all()
+        nearby = []
+        
+        for h in hospitals:
+            if h.latitude is None or h.longitude is None:
+                continue
+                
+            # Haversine formula for accurate distance calculation
+            import math
+            
+            def haversine_distance(lat1, lon1, lat2, lon2):
+                R = 6371  # Earth's radius in kilometers
+                dlat = math.radians(lat2 - lat1)
+                dlon = math.radians(lon2 - lon1)
+                a = (math.sin(dlat/2) * math.sin(dlat/2) + 
+                     math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * 
+                     math.sin(dlon/2) * math.sin(dlon/2))
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                return R * c
+            
+            distance = haversine_distance(lat, lng, h.latitude, h.longitude)
+            if distance <= radius:
+                nearby.append({
+                    "id": h.id,
+                    "name": h.name,
+                    "address": h.address,
+                    "latitude": h.latitude,
+                    "longitude": h.longitude,
+                    "type": h.type,
+                    "emergency_services": h.emergency_services,
+                    "distance": round(distance, 2),
+                    "contact_number": h.contact_number
+                })
+        
+        # Sort by distance using numeric value directly
+        nearby.sort(key=lambda x: x.get('distance', float('inf')) if isinstance(x.get('distance'), (int, float)) else float('inf'))
+        
+        return jsonify({
+            "hospitals": nearby,
+            "total": len(nearby),
+            "search_params": {
+                "latitude": lat,
+                "longitude": lng,
+                "radius_km": radius
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": "Failed to fetch nearby hospitals"}), 500
 
 @app.route('/api/hospitals/seed', methods=['POST'])
 def seed_hospitals():

@@ -46,7 +46,7 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       // Check with API first
       const apiResult = await getOngoingBooking();
-      if (apiResult.has_ongoing) {
+      if (apiResult.has_ongoing && apiResult.booking) {
         const booking = {
           booking_id: apiResult.booking.id,
           booking_code: apiResult.booking.booking_code,
@@ -65,17 +65,8 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
         setOngoingBooking(null);
       }
     } catch (error) {
-      console.error('Error checking ongoing booking:', error);
-      // Fallback to local storage
-      try {
-        const stored = await AsyncStorage.getItem('ongoingBooking');
-        if (stored) {
-          const booking = JSON.parse(stored);
-          setOngoingBookingState(booking);
-        }
-      } catch (localError) {
-        setOngoingBooking(null);
-      }
+      // Silently handle no ongoing booking case
+      setOngoingBooking(null);
     }
   };
 

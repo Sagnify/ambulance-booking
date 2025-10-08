@@ -82,6 +82,10 @@ export const getOngoingBooking = async () => {
     const response = await API.get('/api/user/ongoing-booking');
     return response.data;
   } catch (error: any) {
+    // If it's a 401/403 error, return no ongoing booking instead of throwing
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      return { has_ongoing: false };
+    }
     throw new Error(error.response?.data?.message || 'Failed to get ongoing booking');
   }
 };
