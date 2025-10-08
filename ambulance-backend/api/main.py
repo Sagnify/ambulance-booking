@@ -769,6 +769,38 @@ def cancel_booking(booking_id):
         db.session.rollback()
         return jsonify({"error": f"Failed to cancel booking: {str(e)}"}), 500
 
+@app.route('/api/hospital/<int:hospital_id>/bookings/<int:booking_id>/track')
+def get_booking_tracking_data(hospital_id, booking_id):
+    from .models import Booking, Driver, Hospital
+    
+    try:
+        booking = Booking.query.filter_by(id=booking_id, hospital_id=hospital_id).first()
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        hospital = Hospital.query.get(booking.hospital_id)
+        driver = Driver.query.get(booking.ambulance_id) if booking.ambulance_id else None
+        
+        result = {
+            "booking_id": booking.id,
+            "status": booking.status,
+            "pickup_latitude": booking.pickup_latitude,
+            "pickup_longitude": booking.pickup_longitude,
+            "pickup_location": booking.pickup_location,
+            "hospital_latitude": hospital.latitude if hospital else None,
+            "hospital_longitude": hospital.longitude if hospital else None,
+            "hospital_name": hospital.name if hospital else None,
+            "ambulance_latitude": booking.ambulance_latitude or (driver.current_latitude if driver else None),
+            "ambulance_longitude": booking.ambulance_longitude or (driver.current_longitude if driver else None),
+            "driver_name": driver.name if driver else None,
+            "vehicle_number": driver.vehicle_number if driver else None,
+            "last_updated": booking.ambulance_location_updated_at.isoformat() if booking.ambulance_location_updated_at else None
+        }
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": "Failed to get tracking data"}), 500
+
 @app.route('/api/hospital/<int:hospital_id>/bookings/<int:booking_id>/cancel', methods=['POST'])
 def hospital_cancel_booking(hospital_id, booking_id):
     from .models import Booking, Driver

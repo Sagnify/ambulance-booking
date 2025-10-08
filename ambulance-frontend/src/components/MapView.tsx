@@ -38,7 +38,7 @@ const MapViewComponent: React.FC<MapViewProps> = ({
       <WebView
         ref={webViewRef}
         style={styles.map}
-        key={`${userLocation.latitude}-${userLocation.longitude}-${mapMode}`}
+
         source={{
           html: `
             <!DOCTYPE html>

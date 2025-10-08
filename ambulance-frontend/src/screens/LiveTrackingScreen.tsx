@@ -369,7 +369,7 @@ const LiveTrackingScreen = () => {
             <Text style={[styles.dashboardTitle, { color: isCancelled ? '#DC2626' : getThemeColor() }]}>
               {isCancelled ? '❌ Booking Cancelled' : `🚑 ${bookingData.booking_type} Tracking`}
             </Text>
-            {!isCancelled && (
+            {!isCancelled && ongoingBooking?.status !== 'On Route' && ongoingBooking?.status !== 'Arrived' && (
               <TouchableOpacity onPress={handleCancelBooking}>
                 <Text style={[styles.cancelText, { color: '#DC2626' }]}>Cancel</Text>
               </TouchableOpacity>
@@ -419,7 +419,11 @@ const LiveTrackingScreen = () => {
               <Text style={[styles.statusTitle, { color: colors.text }]}>Ambulance Status</Text>
               <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#DC2626' : isAssigned ? '#10B981' : '#F59E0B' }]}>
                 <Text style={styles.statusBadgeText}>
-                  {isCancelled ? '❌ Cancelled' : isAssigned ? '🚑 Assigned' : '⏳ Assigning'}
+                  {isCancelled ? '❌ Cancelled' : 
+                   ongoingBooking?.status === 'Assigned' ? '🚑 Assigned' :
+                   ongoingBooking?.status === 'On Route' ? '🚗 On Route' :
+                   ongoingBooking?.status === 'Arrived' ? '📍 Arrived' :
+                   isAssigned ? '🚑 Assigned' : '⏳ Assigning'}
                 </Text>
               </View>
             </View>
@@ -515,10 +519,10 @@ const LiveTrackingScreen = () => {
           userLocation={userLocation}
           hospitalLocation={hospitalLocation}
           ambulanceLocation={ambulanceLocation ?? undefined}
-          showHospitalMarker={true}
+          showHospitalMarker={!isAssigned || ongoingBooking?.status === 'Arrived'}
           showAmbulanceMarker={isAssigned}
-          showUserMarker={true}
-          showRoute={isAssigned}
+          showUserMarker={ongoingBooking?.status !== 'Arrived'}
+          showRoute={true}
         />
 
         {renderBottomPanel()}

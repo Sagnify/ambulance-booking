@@ -224,30 +224,22 @@ const HomeScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Navigation and Action Buttons */}
+      {/* Action Buttons */}
       <View style={styles.actionButtons}>
-        {(item.status === 'Assigned' || item.status === 'On Route' || item.status === 'Arrived') && (() => {
-          const destination = getNavigationDestination(item);
-          return destination && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.navigateButton]}
-              onPress={() => openGoogleMaps(destination.latitude, destination.longitude, destination.label)}
-            >
-              <Text style={styles.actionButtonText}>🗺️ Navigate</Text>
-            </TouchableOpacity>
-          );
-        })()}
         
         {item.status === 'Assigned' && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.startButton]}
+            onPress={() => handleBookingAction(item.id, 'On Route')}
+          >
+            <Text style={styles.actionButtonText}>🚗 Start Journey</Text>
+          </TouchableOpacity>
+        )}
+        
+        {item.status === 'On Route' && (
           <>
             <TouchableOpacity
-              style={[styles.actionButton, styles.startButton]}
-              onPress={() => handleBookingAction(item.id, 'On Route')}
-            >
-              <Text style={styles.actionButtonText}>🚗 Start Journey</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.floatingNavButton]}
+              style={[styles.actionButton, styles.navigateButton]}
               onPress={() => {
                 const destination = getNavigationDestination(item);
                 if (destination) {
@@ -255,27 +247,37 @@ const HomeScreen: React.FC = () => {
                 }
               }}
             >
-              <Text style={styles.actionButtonText}>🗺️ Open Maps</Text>
+              <Text style={styles.actionButtonText}>🗺️ Navigate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.arrivedButton]}
+              onPress={() => handleBookingAction(item.id, 'Arrived')}
+            >
+              <Text style={styles.actionButtonText}>📍 Mark Arrived</Text>
             </TouchableOpacity>
           </>
         )}
         
-        {item.status === 'On Route' && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.arrivedButton]}
-            onPress={() => handleBookingAction(item.id, 'Arrived')}
-          >
-            <Text style={styles.actionButtonText}>📍 Mark Arrived</Text>
-          </TouchableOpacity>
-        )}
-        
         {item.status === 'Arrived' && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.completeButton]}
-            onPress={() => handleBookingAction(item.id, 'Completed')}
-          >
-            <Text style={styles.actionButtonText}>✅ Complete Pickup</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.navigateButton]}
+              onPress={() => {
+                const destination = getNavigationDestination(item);
+                if (destination) {
+                  openGoogleMaps(destination.latitude, destination.longitude, destination.label);
+                }
+              }}
+            >
+              <Text style={styles.actionButtonText}>🏥 To Hospital</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.completeButton]}
+              onPress={() => handleBookingAction(item.id, 'Completed')}
+            >
+              <Text style={styles.actionButtonText}>✅ Complete</Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
     </View>
@@ -613,9 +615,7 @@ const styles = StyleSheet.create({
   completeButton: {
     backgroundColor: '#FF9500',
   },
-  floatingNavButton: {
-    backgroundColor: '#AF52DE',
-  },
+
   actionButtonText: {
     color: '#fff',
     fontSize: 15,
