@@ -161,28 +161,53 @@ const HomeScreen = () => {
     await fetchNearbyServices(userLocation.latitude, userLocation.longitude, newRadius);
   };
   
-  // Handle hospital search and map coordination
-  const handleHospitalSearch = (searchText: string) => {
+  // Handle hospital search - global search across all hospitals
+  const handleHospitalSearch = async (searchText: string) => {
     setHospitalSearch(searchText);
     
     if (searchText.trim() === '') {
+      // Show nearby hospitals when search is empty
       setFilteredHospitals(hospitalData);
-      // Show all hospitals on map
       if (webViewRef.current) {
         webViewRef.current.postMessage(JSON.stringify({ type: 'showNormalHospitals' }));
       }
     } else {
-      const filtered = hospitalData.filter(hospital => 
-        hospital.name.toLowerCase().includes(searchText.toLowerCase())
-      );
-      setFilteredHospitals(filtered);
-      
-      // Update map to show only filtered hospitals
-      if (webViewRef.current) {
-        webViewRef.current.postMessage(JSON.stringify({ 
-          type: 'showFilteredHospitals', 
-          hospitals: filtered 
-        }));
+      // Global search - fetch all hospitals and filter
+      try {
+        const response = await fetch('https://ambulance-booking-roan.vercel.app/api/hospitals');
+        if (response.ok) {
+          const allHospitals = await response.json();
+          const filtered = allHospitals.filter((hospital: any) => 
+            hospital.name.toLowerCase().includes(searchText.toLowerCase()) ||
+            hospital.address.toLowerCase().includes(searchText.toLowerCase())
+          );
+          
+          // Calculate distance for global search results
+          const hospitalsWithDistance = filtered.map((hospital: any) => {
+            const distance = ((hospital.latitude - userLocation.latitude) ** 2 + 
+                            (hospital.longitude - userLocation.longitude) ** 2) ** 0.5 * 111;
+            return {
+              ...hospital,
+              distance: distance.toFixed(2)
+            };
+          });
+          
+          setFilteredHospitals(hospitalsWithDistance);
+          
+          if (webViewRef.current) {
+            webViewRef.current.postMessage(JSON.stringify({ 
+              type: 'showFilteredHospitals', 
+              hospitals: hospitalsWithDistance 
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Global hospital search failed:', error);
+        // Fallback to local search
+        const filtered = hospitalData.filter(hospital => 
+          hospital.name.toLowerCase().includes(searchText.toLowerCase())
+        );
+        setFilteredHospitals(filtered);
       }
     }
   };

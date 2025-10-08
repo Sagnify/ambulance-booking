@@ -616,9 +616,45 @@
             window.location.href = '/dashboard/login';
         });
         
+        // WebRTC Connection for real-time updates
+        let hospitalWebRTC = null;
+        
+        async function initializeWebRTC() {
+            try {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/peerpyrtc-client/dist/peerpyrtc.umd.js';
+                script.onload = async () => {
+                    hospitalWebRTC = new window.WebRTCConnection(`hospital_${hospitalId}`, {
+                        peerId: `hospital_dashboard_${hospitalId}`,
+                        debug: true
+                    });
+                    
+                    hospitalWebRTC.onMessage = (senderId, message, event) => {
+                        console.log('🏥 Hospital received:', event, message);
+                        if (event === 'booking_update') {
+                            loadHospitalData(); // Refresh dashboard when booking updates
+                        }
+                    };
+                    
+                    hospitalWebRTC.onOpen = () => {
+                        console.log('✅ Hospital WebRTC Connected');
+                    };
+                    
+                    hospitalWebRTC.onError = (error) => {
+                        console.error('❌ Hospital WebRTC Error:', error);
+                    };
+                    
+                    await hospitalWebRTC.connect();
+                };
+                document.head.appendChild(script);
+            } catch (error) {
+                console.error('WebRTC initialization failed:', error);
+            }
+        }
+        
         document.addEventListener('DOMContentLoaded', function() {
             loadHospitalData();
-            // Removed polling - using WebRTC for real-time updates
+            initializeWebRTC();
         });
     </script>
 </body>

@@ -14,6 +14,13 @@ try:
 except ImportError:
     pass
 
+# Register PeerPyRTC service
+try:
+    from api.peerpyrtc_service import peerpyrtc_bp
+    app.register_blueprint(peerpyrtc_bp)
+except ImportError:
+    pass
+
 # Database health check
 @app.route('/api/health')
 def health_check():

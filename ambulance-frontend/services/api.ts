@@ -36,6 +36,7 @@ export const createBooking = async (bookingData: any) => {
     const userId = await AsyncStorage.getItem('userId');
     if (userId) {
       try {
+        const { WebRTCConnection } = require('peerpyrtc-client');
         const rtc = new WebRTCConnection(`hospital_${bookingData.hospital_id}`, { 
           peerId: `user_${userId}`,
           debug: true 

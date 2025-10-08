@@ -18,6 +18,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import API from '../../services/api';
 import LocationService from '../../services/locationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 const API_BASE_URL = 'https://ambulance-booking-roan.vercel.app';
@@ -48,12 +49,51 @@ const LiveTrackingScreen = () => {
   useEffect(() => {
     createBooking();
     startLocationTracking();
+    initializeWebRTC();
     
     // Cleanup location tracking when component unmounts
     return () => {
       LocationService.stopBookingTracking();
+      if ((global as any).peerpyrtcClient) {
+        (global as any).peerpyrtcClient.closeConnection();
+      }
     };
   }, []);
+
+  const initializeWebRTC = async () => {
+    try {
+      const { WebRTCConnection } = require('peerpyrtc-client');
+      const userId = await AsyncStorage.getItem('userId');
+      
+      if (userId && bookingData.hospital_id) {
+        const rtc = new WebRTCConnection(`hospital_${bookingData.hospital_id}`, {
+          peerId: `user_${userId}`,
+          debug: true
+        });
+        
+        rtc.onOpen = () => {
+          console.log('✅ LiveTracking WebRTC Connected');
+        };
+        
+        rtc.onMessage = (senderId, message, event) => {
+          console.log('📨 Received from hospital:', event, message);
+          if (event === 'ambulance_assigned') {
+            setIsAssigned(true);
+            setAssignedDriver(message.driver);
+          }
+        };
+        
+        rtc.onError = (error) => {
+          console.error('❌ LiveTracking WebRTC Error:', error);
+        };
+        
+        await rtc.connect();
+        (global as any).peerpyrtcClient = rtc;
+      }
+    } catch (error) {
+      console.error('WebRTC initialization failed:', error);
+    }
+  };
 
   const startLocationTracking = async () => {
     const success = await LocationService.startBookingTracking((location) => {
