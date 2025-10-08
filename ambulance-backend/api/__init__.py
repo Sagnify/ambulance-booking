@@ -177,47 +177,6 @@ def create_app(config_name=None):
         except Exception as e:
             print(f"Database initialization error: {e}")
     
-    @app.route('/')
-    def api_list():
-        try:
-            from .models import Hospital, Driver
-            hospital_count = Hospital.query.count()
-            driver_count = Driver.query.count()
-        except Exception as e:
-            hospital_count = 0
-            driver_count = 0
-            
-        return {
-            "message": "Ambulance Booking API",
-            "statistics": {
-                "total_hospitals": hospital_count,
-                "total_drivers": driver_count,
-                "total_organizations": hospital_count  # Same as hospitals for now
-            },
-            "endpoints": {
-                "Health Routes": {
-                    "GET /api/health/check": "Check server and database status"
-                },
-                "Hospital Routes": {
-                    "GET /api/hospitals": "Get list of all hospitals and organizations",
-                    "GET /api/hospitals/nearby": "Get nearby hospitals (params: lat, lng, radius)",
-                    "POST /api/hospitals/seed": "Populate database with Kolkata hospitals (sample data)"
-                },
-                "OTP Routes": {
-                    "POST /api/otp/send": "Send OTP to phone number",
-                    "POST /api/otp/verify": "Verify OTP code"
-                },
-                "Auth Routes": {
-                    "POST /api/auth/signup": "Send OTP for new user signup",
-                    "POST /api/auth/signup/verify": "Verify OTP and create user",
-                    "POST /api/auth/login": "Send OTP for existing user login",
-                    "POST /api/auth/login/verify": "Verify OTP and authenticate user",
-                    "PUT /api/auth/profile": "Update user profile details"
-                },
-                "Driver Routes": {
-                    "GET /api/drivers": "Get all drivers from all hospitals with details"
-                }
-            }
-        }
+
 
     return app

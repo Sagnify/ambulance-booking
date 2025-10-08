@@ -2,18 +2,17 @@ from api import create_app
 from api.extensions import db
 from flask_cors import CORS
 from flask import render_template, request, jsonify
-from api.webrtc_signaling import webrtc_bp
-from api.auth_routes import auth_bp
-from api.otp_routes import otp_bp
 
 # Create app via factory
 app = create_app()
 CORS(app)
 
-# Register blueprints
-app.register_blueprint(webrtc_bp)
-app.register_blueprint(auth_bp)
-app.register_blueprint(otp_bp)
+# Register webrtc blueprint that's not in __init__.py
+try:
+    from api.webrtc_signaling import webrtc_bp
+    app.register_blueprint(webrtc_bp)
+except ImportError:
+    pass
 
 # Database health check
 @app.route('/api/health')
