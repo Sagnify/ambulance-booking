@@ -874,79 +874,7 @@ def driver_login():
     
     return jsonify({"error": "Invalid credentials"}), 401
 
-@app.route('/api/auth/driver/login', methods=['POST'])
-def driver_phone_login():
-    from .models import Driver
-    from .otp_routes import send_otp_helper
-    
-    data = request.get_json()
-    phone_number = data.get('phone_number')
-    
-    if not phone_number:
-        return jsonify({'error': 'Phone number is required'}), 400
-    
-    # Check if driver exists with this phone number
-    driver = Driver.query.filter_by(phone_number=phone_number).first()
-    if not driver:
-        return jsonify({'error': 'Driver not found with this phone number'}), 404
-    
-    # Send OTP for login
-    otp_data, otp_status = send_otp_helper(phone_number)
-    if otp_status != 200:
-        return jsonify(otp_data), otp_status
-    
-    return jsonify({'message': 'OTP sent for driver login verification'}), 200
 
-@app.route('/api/auth/driver/login/verify', methods=['POST'])
-def driver_phone_login_verify():
-    from .models import Driver, Hospital
-    from .otp_routes import verify_otp_helper
-    from flask_jwt_extended import create_access_token
-    from datetime import timedelta
-    
-    data = request.get_json()
-    phone_number = data.get('phone_number')
-    otp = data.get('otp')
-    
-    if not phone_number or not otp:
-        return jsonify({'error': 'Phone number and OTP are required'}), 400
-    
-    # Verify OTP
-    verify_data, verify_status = verify_otp_helper(phone_number, otp)
-    if verify_status != 200:
-        return jsonify(verify_data), verify_status
-    
-    # Get driver
-    driver = Driver.query.filter_by(phone_number=phone_number).first()
-    if not driver:
-        return jsonify({'error': 'Driver not found'}), 404
-    
-    hospital = Hospital.query.get(driver.hospital_id)
-    
-    # Generate JWT token
-    access_token = create_access_token(
-        identity=str(driver.id),
-        expires_delta=timedelta(days=30),
-        additional_claims={
-            "user_type": "driver",
-            "hospital_id": driver.hospital_id
-        }
-    )
-    
-    return jsonify({
-        "access_token": access_token,
-        "driver": {
-            "id": driver.id,
-            "name": driver.name,
-            "phone": driver.phone_number,
-            "license_number": driver.license_number,
-            "hospital_id": driver.hospital_id,
-            "is_available": driver.is_available,
-            "current_latitude": driver.current_latitude,
-            "current_longitude": driver.current_longitude,
-            "hospital_name": hospital.name if hospital else None
-        }
-    }), 200
 
 @app.route('/driver/location', methods=['POST'])
 def update_driver_location():
@@ -1308,8 +1236,6 @@ def api_list():
             },
             "Driver Authentication": {
                 "POST /driver/login": "Driver login with login_id/password",
-                "POST /api/auth/driver/login": "Send OTP for driver phone login",
-                "POST /api/auth/driver/login/verify": "Verify OTP and authenticate driver",
                 "POST /driver/location": "Update driver location",
                 "POST /driver/availability": "Set driver availability",
                 "GET /driver/bookings": "Get driver's assigned bookings"
@@ -1359,7 +1285,7 @@ def api_list():
             "OTP": "Fixed OTP is '1234' for all phone numbers",
             "JWT": "Tokens expire in 30 days",
             "Phone_Format": "Accepts international formats, cleaned automatically",
-            "Driver_Login": "Supports both login_id/password and phone/OTP methods",
+            "Driver_Login": "Uses login_id/password authentication only",
             "Real_Time": "Uses polling for real-time updates"
         }
     }
