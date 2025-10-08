@@ -33,9 +33,19 @@ const LiveTrackingScreen = () => {
   const { setOngoingBooking } = useBooking();
   const webViewRef = useRef(null);
   
-  const [booking, setBooking] = useState<{ booking_id: number; booking_code: string } | null>(null);
+  const { ongoingBooking } = useBooking();
+  
+  // Initialize state based on existing booking if available
+  const [booking, setBooking] = useState<{ booking_id: number; booking_code: string } | null>(
+    bookingData.booking_code ? {
+      booking_id: bookingData.booking_id || 0,
+      booking_code: bookingData.booking_code
+    } : null
+  );
   const [timeRemaining, setTimeRemaining] = useState(30);
-  const [isAssigned, setIsAssigned] = useState(false);
+  const [isAssigned, setIsAssigned] = useState(
+    ongoingBooking?.status === 'Assigned' && bookingData.booking_code ? true : false
+  );
   const [isCancelled, setIsCancelled] = useState(false);
   const [cancelReason, setCancelReason] = useState<string | null>(null);
   const [ambulanceLocation, setAmbulanceLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -44,14 +54,31 @@ const LiveTrackingScreen = () => {
     vehicle_number?: string;
     // add other fields as needed
   }
-  const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
+  const [assignedDriver, setAssignedDriver] = useState<Driver | null>(
+    ongoingBooking?.ambulance && bookingData.booking_code ? ongoingBooking.ambulance : null
+  );
   const [userLocation] = useState({ latitude: 22.4675, longitude: 88.3732 });
   const [hospitalLocation] = useState({ latitude: 22.4775, longitude: 88.3832 });
   const panelHeight = useRef(new Animated.Value(height * 0.4)).current;
   const [panelPosition, setPanelPosition] = useState(height * 0.4);
 
   useEffect(() => {
-    createBooking();
+    // Check if this is an existing booking or new one
+    if (bookingData.booking_code) {
+      // Existing booking - set ambulance location if assigned
+      if (ongoingBooking?.ambulance && isAssigned) {
+        setAmbulanceLocation({
+          latitude: userLocation.latitude + 0.01,
+          longitude: userLocation.longitude + 0.01
+        });
+      }
+      // Check status for updates
+      checkBookingStatus();
+    } else {
+      // New booking - create it
+      createBooking();
+    }
+    
     startLocationTracking();
     initializeWebRTC();
     
@@ -165,9 +192,11 @@ const LiveTrackingScreen = () => {
         // Update ongoing booking with assignment info
         setOngoingBooking({
           booking_id: booking.booking_id,
+          booking_code: booking.booking_code,
           status: result.status,
           booking_type: bookingData.booking_type,
           pickup_location: bookingData.pickup_location,
+          destination: bookingData.destination,
           is_cancelled: false,
           ambulance: result.ambulance
         });

@@ -23,6 +23,7 @@ const OngoingBookingBar: React.FC = () => {
   const handlePress = () => {
     navigation.navigate('LiveTracking' as never, { 
       bookingData: {
+        booking_id: ongoingBooking.booking_id,
         booking_code: ongoingBooking.booking_code,
         booking_type: ongoingBooking.booking_type,
         pickup_location: ongoingBooking.pickup_location,
