@@ -25,29 +25,44 @@
     <script>
         // Import PeerPyRTC client
         const script = document.createElement('script');
-        script.src = 'https://unpkg.com/peerpyrtc-client@latest/dist/peerpyrtc-client.min.js';
+        script.src = 'https://unpkg.com/peerpyrtc-client/dist/peerpyrtc.umd.js';
         document.head.appendChild(script);
         
         class HospitalWebRTC {
             constructor() {
                 this.peerId = 'hospital_' + Math.random().toString(36).substr(2, 9);
-                this.client = null;
+                this.rtc = null;
             }
 
             async initialize() {
                 try {
-                    this.client = new window.PeerPyRTCClient({
+                    const { WebRTCConnection } = window.WebRTCConnection;
+                    this.rtc = new WebRTCConnection('ambulance-updates', {
                         peerId: this.peerId,
-                        serverUrl: 'https://ambulance-booking-roan.vercel.app/api'
+                        debug: true
                     });
                     
-                    await this.client.connect();
+                    this.rtc.onMessage = (senderId, message, event) => {
+                        console.log('Hospital received:', event, message);
+                        if (event === 'booking_update') {
+                            this.handleBookingUpdate(message);
+                        }
+                    };
                     
-                    this.client.onMessage((data) => {
-                        this.handleBookingUpdate(data);
-                    });
+                    this.rtc.onPeerJoined = (peer) => {
+                        console.log('🟢 Peer joined:', peer.id);
+                    };
                     
-                    this.updateStatus('Connected');
+                    this.rtc.onError = (error) => {
+                        console.error('❌ Hospital WebRTC Error:', error);
+                        this.updateStatus('Error');
+                    };
+                    
+                    this.rtc.onOpen = () => {
+                        this.updateStatus('Connected');
+                    };
+                    
+                    await this.rtc.connect();
                 } catch (error) {
                     console.error('PeerPyRTC initialization failed:', error);
                     this.updateStatus('Connection Failed');
@@ -96,8 +111,8 @@
             }
 
             disconnect() {
-                if (this.client) {
-                    this.client.disconnect();
+                if (this.rtc) {
+                    this.rtc.closeConnection();
                 }
                 this.updateStatus('Disconnected');
             }

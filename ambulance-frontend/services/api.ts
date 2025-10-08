@@ -1,6 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import PeerPyRTCClient from 'peerpyrtc-client';
+import { WebRTCConnection } from 'peerpyrtc-client';
 
 const API = axios.create({
   baseURL: 'https://ambulance-booking-roan.vercel.app',
@@ -36,24 +36,28 @@ export const createBooking = async (bookingData: any) => {
     const userId = await AsyncStorage.getItem('userId');
     if (userId) {
       try {
-        const client = new PeerPyRTCClient({
+        const rtc = new WebRTCConnection(`hospital_${bookingData.hospital_id}`, { 
           peerId: `user_${userId}`,
-          serverUrl: 'https://ambulance-booking-roan.vercel.app/api'
+          debug: true 
         });
         
-        await client.connect();
+        rtc.onOpen = () => {
+          console.log('✅ PeerPyRTC: Connected, sending booking update');
+          rtc.emit('booking_update', {
+            booking_id: response.data.booking_id,
+            ...bookingData,
+            status: 'created'
+          });
+        };
         
-        // Send booking update
-        client.send(`hospital_${bookingData.hospital_id}`, {
-          type: 'booking_update',
-          booking_id: response.data.booking_id,
-          ...bookingData,
-          status: 'created'
-        });
+        rtc.onError = (error) => {
+          console.error('❌ PeerPyRTC Error:', error);
+        };
         
-        (global as any).peerpyrtcClient = client;
+        await rtc.connect();
+        (global as any).peerpyrtcClient = rtc;
       } catch (error) {
-        console.log('PeerPyRTC initialization failed, continuing without real-time updates');
+        console.error('❌ PeerPyRTC initialization failed:', error);
       }
     }
     

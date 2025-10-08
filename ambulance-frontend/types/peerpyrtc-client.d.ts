@@ -1,16 +1,37 @@
 declare module 'peerpyrtc-client' {
-  interface PeerPyRTCClientOptions {
-    peerId: string;
-    serverUrl: string;
+  interface WebRTCConnectionOptions {
+    peerId?: string;
+    debug?: boolean;
+    maxReconnectAttempts?: number;
+    reconnectDelay?: number;
   }
 
-  class PeerPyRTCClient {
-    constructor(options: PeerPyRTCClientOptions);
+  export class WebRTCConnection {
+    constructor(roomName: string, options?: WebRTCConnectionOptions);
+    
+    // Connection methods
     connect(): Promise<void>;
-    send(targetId: string, data: any): Promise<void>;
-    onMessage(callback: (data: any) => void): void;
-    disconnect(): void;
+    closeConnection(): Promise<void>;
+    isConnected(): boolean;
+    
+    // Messaging methods
+    sendMessage(message: string): void;
+    emit(event: string, data: any): void;
+    broadcast(event: string, data: any): void;
+    
+    // Room management
+    getRoomPeers(): any[];
+    getPeerCount(): number;
+    isRoomHost(): boolean;
+    
+    // Event callbacks
+    onOpen?: () => void;
+    onClose?: () => void;
+    onError?: (error: any) => void;
+    onMessage?: (senderId: string, message: string, event?: string) => void;
+    onPeerJoined?: (peer: any) => void;
+    onPeerLeft?: (peer: any) => void;
+    onRoomUpdate?: (peers: any[]) => void;
+    onStatusChange?: (status: string) => void;
   }
-
-  export = PeerPyRTCClient;
 }
