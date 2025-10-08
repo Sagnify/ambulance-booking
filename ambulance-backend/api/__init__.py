@@ -6,13 +6,7 @@ from .config import config_by_name
 def seed_sample_hospitals():
     from .models import Hospital, Driver, User
     
-    # Create default user for bookings
-    default_user = User(
-        name='Guest User',
-        phone_number='+91-0000000000',
-        email='guest@ambulance.com'
-    )
-    db.session.add(default_user)
+    # Skip creating default user - users should be created through proper authentication
     
     hospitals_data = [
         {

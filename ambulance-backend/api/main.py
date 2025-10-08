@@ -182,8 +182,8 @@ def _format_pending_bookings(hospital_id, datetime):
         "pickup_location": b.pickup_location,
         "pickup_latitude": b.pickup_latitude,
         "pickup_longitude": b.pickup_longitude,
-        "patient_name": b.patient_name,
-        "patient_phone": b.patient_phone,
+        "patient_name": b.patient_name or (b.user.name if b.user else 'Unknown'),
+        "patient_phone": b.patient_phone or (b.user.phone_number if b.user else 'Unknown'),
         "requested_at": b.requested_at.isoformat(),
         "time_remaining": max(0, 30 - int((datetime.utcnow() - b.requested_at).total_seconds()))
     } for b in Booking.query.filter_by(hospital_id=hospital_id, status='Pending').all()]
@@ -385,14 +385,10 @@ def create_booking():
         
         user = User.query.get(current_user_id)
         if not user:
-            # Create user if not exists (for testing purposes)
-            user = User(
-                id=current_user_id,
-                name="Test User",
-                phone_number="1234567890"
-            )
-            db.session.add(user)
-            db.session.flush()
+            return jsonify({
+                "error": "User not found",
+                "message": "Please login again"
+            }), 401
         
         # Generate unique 8-digit booking code
         import secrets
@@ -417,8 +413,8 @@ def create_booking():
             emergency_type=data.get('emergency_type'),
             severity=data.get('severity'),
             accident_details=json.dumps(data.get('accident_details', {})),
-            patient_name=data.get('patient_name'),
-            patient_phone=data.get('patient_phone')
+            patient_name=data.get('patient_name') or user.name,
+            patient_phone=data.get('patient_phone') or user.phone_number
         )
         
         db.session.add(booking)

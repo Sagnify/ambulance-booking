@@ -23,9 +23,8 @@ const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps> = ({ r
         pickup_longitude: 77.2090,
         booking_type: 'emergency',
         emergency_type: 'medical',
-        severity: 'high',
-        patient_name: 'Patient Name',
-        patient_phone: '+91 9876543210'
+        severity: 'high'
+        // Remove hardcoded patient_name and patient_phone - let backend use user's data
       };
       
       const result = await createBooking(bookingData);
