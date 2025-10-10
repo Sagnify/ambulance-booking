@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ambulance-frontend",
-    "slug": "ambulance-frontend",
+    "name": "MediSwift",
+    "slug": "mediswift",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,13 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mediswift.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app uses the microphone for voice search functionality.",
+        "NSLocationWhenInUseUsageDescription": "This app uses location to find nearby hospitals and track ambulance.",
+        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,13 +27,34 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.ambulancefrontend"
+      "package": "com.mediswift.app",
+      "versionCode": 1,
+      "permissions": [
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-maps"
-    ]
+      "expo-maps",
+      "expo-speech-recognition",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow MediSwift to use your location to find nearby hospitals and track ambulance."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0dda7861-7824-4187-a545-7f0fdd514a14"
+      }
+    }
   }
 }

@@ -11,6 +11,7 @@ import {
   Animated,
   Keyboard 
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import LocationSnapButton from '../components/LocationSnapButton';
@@ -21,16 +22,19 @@ import SlideToBook from '../components/SlideToBook';
 import HospitalSearch from '../components/HospitalSearch';
 import EmergencyButtons from '../components/EmergencyButtons';
 import HospitalList from '../components/HospitalList';
+
 import EmergencyForm from '../components/EmergencyForm';
 import AccidentForm from '../components/AccidentForm';
 import LoadingScreen from './LoadingScreen';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useBooking } from '../../context/BookingContext';
+import { useLanguage } from '../../context/LanguageContext';
 import API from '../../services/api';
 import { useNavigation } from '@react-navigation/native';
 import LocationService from '../../services/locationService';
 import OngoingBookingBar from '../components/OngoingBookingBar';
+import VoiceAutomation from '../components/VoiceAutomation';
 
 
 const { width, height } = Dimensions.get('window');
@@ -39,6 +43,7 @@ const HomeScreen = () => {
   const { logout } = useAuth();
   const { isDarkMode, colors } = useTheme();
   const { hasOngoingBooking, checkOngoingBooking } = useBooking();
+  const { t } = useLanguage();
   const navigation = useNavigation<any>();
   const [address, setAddress] = useState('Fetching location...');
   const [userLocation, setUserLocation] = useState({ 
@@ -91,6 +96,8 @@ const HomeScreen = () => {
   const [bookingHospitalData, setBookingHospitalData] = useState<any>(null);
   const emergencyPulse = useRef(new Animated.Value(1)).current;
   const [isLoading, setIsLoading] = useState(true);
+  const [isSearchingHospitals, setIsSearchingHospitals] = useState(false);
+
 
 
   // Handle loading completion
@@ -122,6 +129,7 @@ const HomeScreen = () => {
   // Fetch nearby hospitals and ambulances from API
   const fetchNearbyServices = async (lat: number, lng: number, radius: number = searchRadius) => {
     try {
+      setIsSearchingHospitals(true);
       console.log(`Fetching hospitals near ${lat}, ${lng} within ${radius}km`);
       
       // Fetch hospitals from API
@@ -156,6 +164,8 @@ const HomeScreen = () => {
       setHospitalData([]);
       setFilteredHospitals([]);
       setAmbulanceData([]);
+    } finally {
+      setIsSearchingHospitals(false);
     }
   };
   
@@ -177,6 +187,7 @@ const HomeScreen = () => {
     } else {
       // Global search - fetch all hospitals and filter
       try {
+        setIsSearchingHospitals(true);
         const response = await fetch('https://ambulance-booking-roan.vercel.app/api/hospitals');
         if (response.ok) {
           const allHospitals = await response.json();
@@ -211,6 +222,8 @@ const HomeScreen = () => {
           hospital.name.toLowerCase().includes(searchText.toLowerCase())
         );
         setFilteredHospitals(filtered);
+      } finally {
+        setIsSearchingHospitals(false);
       }
     }
   };
@@ -695,7 +708,7 @@ const HomeScreen = () => {
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingTitle}>Finding Nearest Hospital...</Text>
             <View style={styles.loadingSpinner}>
-              <Text style={styles.spinnerText}>🏥</Text>
+              <MaterialIcons name="local-hospital" size={40} color="#ff0000" />
             </View>
             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Searching for the best available hospital</Text>
           </View>
@@ -703,7 +716,7 @@ const HomeScreen = () => {
           <View style={styles.loadingContainer}>
             <Text style={styles.accidentLoadingTitle}>Finding Nearest Trauma Center...</Text>
             <View style={styles.loadingSpinner}>
-              <Text style={styles.spinnerText}>🚛</Text>
+              <MaterialIcons name="local-shipping" size={40} color="#ff6600" />
             </View>
             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Locating trauma center and dispatching response team</Text>
           </View>
@@ -750,8 +763,9 @@ const HomeScreen = () => {
               }}>
                 <Text style={[styles.backToFormText, { color: colors.textSecondary }]}>‹ Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.finalConfirmButton} onPress={handleEmergencyBookingConfirm}>
-                <Text style={styles.finalConfirmText}>🚨 BOOK AMBULANCE</Text>
+              <TouchableOpacity style={[styles.finalConfirmButton, { flexDirection: 'row', alignItems: 'center', gap: 8 }]} onPress={handleEmergencyBookingConfirm}>
+                <MaterialIcons name="warning" size={18} color="#fff" />
+                <Text style={styles.finalConfirmText}>BOOK AMBULANCE</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -835,15 +849,19 @@ const HomeScreen = () => {
               }}>
                 <Text style={[styles.backToFormText, { color: colors.textSecondary }]}>‹ Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.accidentConfirmButton} onPress={handleAccidentBookingConfirm}>
-                <Text style={styles.accidentConfirmText}>🚛 DISPATCH RESPONSE</Text>
+              <TouchableOpacity style={[styles.accidentConfirmButton, { flexDirection: 'row', alignItems: 'center', gap: 8 }]} onPress={handleAccidentBookingConfirm}>
+                <MaterialIcons name="local-shipping" size={18} color="#fff" />
+                <Text style={styles.accidentConfirmText}>DISPATCH RESPONSE</Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : showEmergencyDashboard ? (
           <View>
             <View style={styles.dashboardHeader}>
-              <Text style={styles.dashboardTitle}>🚨 Emergency Active</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <MaterialIcons name="warning" size={20} color="#ff0000" />
+                <Text style={styles.dashboardTitle}>Emergency Active</Text>
+              </View>
               <TouchableOpacity onPress={() => {
                 handleEmergencyCancel();
               }}>
@@ -869,11 +887,13 @@ const HomeScreen = () => {
             </View>
             
             <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.callButton}>
-                <Text style={styles.callText}>📞 Call Driver</Text>
+              <TouchableOpacity style={[styles.callButton, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                <MaterialIcons name="phone" size={18} color="#fff" />
+                <Text style={styles.callText}>Call Driver</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.chatButton}>
-                <Text style={styles.chatText}>💬 Live Chat</Text>
+              <TouchableOpacity style={[styles.chatButton, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                <MaterialIcons name="chat" size={18} color="#fff" />
+                <Text style={styles.chatText}>Live Chat</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -915,7 +935,7 @@ const HomeScreen = () => {
           </View>
         ) : (
           <View>
-            <Text style={[styles.panelTitle, { color: colors.text }]}>Find Hospitals</Text>
+            <Text style={[styles.panelTitle, { color: colors.text }]}>{t('findHospitals')}</Text>
             
             <HospitalSearch
               searchText={hospitalSearch}
@@ -927,7 +947,10 @@ const HomeScreen = () => {
                 handleRadiusChange(radius);
                 setShowRadiusControl(false);
               }}
+              isSearching={isSearchingHospitals}
             />
+            
+
             
             <EmergencyButtons onServiceSelect={handleServiceSelect} />
             
@@ -998,6 +1021,15 @@ const HomeScreen = () => {
         onCancel={handleEmergencyCancel}
         onConfirm={handleEmergencyConfirm}
       />
+      
+      {/* <VoiceAutomation
+        onBookingComplete={(bookingData) => {
+          navigation.navigate('LiveTracking', { bookingData });
+        }}
+        hospitalData={hospitalData}
+        onEmergencySelect={handleServiceSelect}
+        onHospitalSelect={handleHospitalSelect}
+      /> */}
     </View>
     <OngoingBookingBar />
     </GestureHandlerRootView>
@@ -1221,9 +1253,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  spinnerText: {
-    fontSize: 40,
-  },
+
   loadingText: {
     fontSize: 16,
     color: '#666',
@@ -1427,6 +1457,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
+
 
 });
 

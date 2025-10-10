@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useBooking } from '../../context/BookingContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface EmergencyButtonsProps {
   onServiceSelect: (service: 'emergency' | 'accident') => void;
@@ -11,6 +13,7 @@ interface EmergencyButtonsProps {
 const EmergencyButtons: React.FC<EmergencyButtonsProps> = ({ onServiceSelect, disabled }) => {
   const { colors } = useTheme();
   const { hasOngoingBooking } = useBooking();
+  const { t } = useLanguage();
   
   const isDisabled = disabled || hasOngoingBooking;
 
@@ -21,14 +24,20 @@ const EmergencyButtons: React.FC<EmergencyButtonsProps> = ({ onServiceSelect, di
         onPress={() => !isDisabled && onServiceSelect('emergency')}
         disabled={isDisabled}
       >
-        <Text style={[styles.emergencyBtnText, { opacity: isDisabled ? 0.6 : 1 }]}>🚨 Emergency</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <MaterialIcons name="warning" size={16} color="#fff" style={{ opacity: isDisabled ? 0.6 : 1 }} />
+          <Text style={[styles.emergencyBtnText, { opacity: isDisabled ? 0.6 : 1 }]}>{t('emergency')}</Text>
+        </View>
       </TouchableOpacity>
       <TouchableOpacity 
         style={[styles.emergencyBtn, { backgroundColor: isDisabled ? colors.textSecondary : colors.primary }]}
         onPress={() => !isDisabled && onServiceSelect('accident')}
         disabled={isDisabled}
       >
-        <Text style={[styles.emergencyBtnText, { opacity: isDisabled ? 0.6 : 1 }]}>🚑 Accident</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <MaterialIcons name="local-hospital" size={16} color="#fff" style={{ opacity: isDisabled ? 0.6 : 1 }} />
+          <Text style={[styles.emergencyBtnText, { opacity: isDisabled ? 0.6 : 1 }]}>{t('accident')}</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );

@@ -1,6 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import LanguageSelector from './LanguageSelector';
+import MediSwiftLogo from './MediSwiftLogo';
 
 interface TopNavigationProps {
   userName: string;
@@ -18,16 +21,22 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
   onLogout 
 }) => {
   const { isDarkMode, toggleTheme, colors } = useTheme();
+  const { t } = useLanguage();
   return (
     <>
       <View style={styles.topContainer}>
         <View style={[styles.addressBar, { backgroundColor: colors.background }]}>
-          <Text style={[styles.greetingText, { color: colors.textSecondary }]} numberOfLines={1}>
-            Hi {userName}!
-          </Text>
-          <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={1}>
-            {address}
-          </Text>
+          <View style={styles.logoSection}>
+            <MediSwiftLogo size="small" color={colors.primary} />
+          </View>
+          <View style={styles.userSection}>
+            <Text style={[styles.greetingText, { color: colors.textSecondary }]} numberOfLines={1}>
+              Hi {userName}!
+            </Text>
+            <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={1}>
+              {address}
+            </Text>
+          </View>
         </View>
 
         <TouchableOpacity style={styles.profileButton} onPress={onProfilePress}>
@@ -38,22 +47,26 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
       {profileMenuVisible && (
         <View style={[styles.profileMenu, { backgroundColor: colors.background }]}>
           <TouchableOpacity style={styles.menuItem} onPress={() => console.log('Profile')}>
-            <Text style={[styles.menuText, { color: colors.text }]}>Profile</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>{t('profile')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => console.log('Medical History')}>
-            <Text style={[styles.menuText, { color: colors.text }]}>Medical History</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>{t('medicalHistory')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => console.log('Emergency Contacts')}>
-            <Text style={[styles.menuText, { color: colors.text }]}>Emergency Contacts</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>{t('emergencyContacts')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={toggleTheme}>
             <Text style={[styles.menuText, { color: colors.text }]}>
-              {isDarkMode ? '☀️' : '🌙'} {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+              {isDarkMode ? '☀️' : '🌙'} {isDarkMode ? t('lightMode') : t('darkMode')}
             </Text>
           </TouchableOpacity>
+          <View style={styles.languageSection}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('language')}</Text>
+            <LanguageSelector />
+          </View>
           <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
           <TouchableOpacity style={styles.menuItem} onPress={onLogout}>
-            <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
+            <Text style={[styles.menuText, styles.logoutText]}>{t('logout')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -78,11 +91,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginRight: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+  },
+  logoSection: {
+    marginRight: 12,
+  },
+  userSection: {
+    flex: 1,
   },
   greetingText: {
     fontSize: 12,
@@ -120,7 +141,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     minWidth: 180,
     paddingVertical: 8,
-    zIndex: 15,
+    zIndex: 999998,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -144,6 +165,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     marginVertical: 4,
     marginHorizontal: 16,
+  },
+  languageSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
 

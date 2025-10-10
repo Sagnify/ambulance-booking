@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollView, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Hospital {
   id: string;
@@ -24,11 +25,33 @@ const HospitalList: React.FC<HospitalListProps> = ({
   onHospitalSelect,
 }) => {
   const { colors } = useTheme();
+  const { translateHospitalName, currentLanguage, t } = useLanguage();
+  const [translatedHospitals, setTranslatedHospitals] = useState<Hospital[]>([]);
+
+  useEffect(() => {
+    translateHospitals();
+  }, [hospitals, currentLanguage]);
+
+  const translateHospitals = async () => {
+    const translated = await Promise.all(
+      hospitals.map(async (hospital) => ({
+        ...hospital,
+        name: await translateHospitalName(hospital.name),
+        distance: hospital.distance + ' ' + (currentLanguage === 'en' ? 'km' : 
+          currentLanguage === 'hi' ? 'किमी' :
+          currentLanguage === 'bn' ? 'কিমি' :
+          currentLanguage === 'ta' ? 'கிமீ' :
+          currentLanguage === 'te' ? 'కిమీ' :
+          currentLanguage === 'gu' ? 'કિમી' : 'km')
+      }))
+    );
+    setTranslatedHospitals(translated);
+  };
 
   return (
     <ScrollView style={styles.hospitalList} showsVerticalScrollIndicator={false}>
-      {hospitals.length > 0 ? (
-        hospitals.map((hospital, index) => (
+      {translatedHospitals.length > 0 ? (
+        translatedHospitals.map((hospital, index) => (
           <TouchableOpacity 
             key={hospital.id || index} 
             style={[
@@ -40,17 +63,22 @@ const HospitalList: React.FC<HospitalListProps> = ({
           >
             <View style={styles.hospitalHeader}>
               <Text style={[styles.hospitalName, { color: colors.text }]}>{hospital.name}</Text>
-              <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>{hospital.distance} km</Text>
+              <Text style={[styles.hospitalDistance, { color: colors.textSecondary }]}>{hospital.distance}</Text>
             </View>
             <Text style={[styles.hospitalType, { color: '#007AFF' }]}>{hospital.type}</Text>
             <Text style={[styles.hospitalServices, { color: colors.textSecondary }]}>
-              Emergency: {hospital.emergency_services ? 'Available' : 'Not Available'}
+              {t('emergency')}: {hospital.emergency_services ? t('available') : t('notAvailable')}
             </Text>
           </TouchableOpacity>
         ))
       ) : (
         <Text style={[styles.noHospitalsText, { color: colors.textSecondary }]}>
-          No hospitals found in {searchRadius}km radius
+          {t('noHospitalsFound')} {searchRadius}{currentLanguage === 'en' ? 'km' : 
+            currentLanguage === 'hi' ? 'किमी' :
+            currentLanguage === 'bn' ? 'কিমি' :
+            currentLanguage === 'ta' ? 'கிமீ' :
+            currentLanguage === 'te' ? 'కిమీ' :
+            currentLanguage === 'gu' ? 'કિમી' : 'km'} {t('radius')}
         </Text>
       )}
     </ScrollView>
